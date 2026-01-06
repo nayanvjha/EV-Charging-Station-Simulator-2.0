@@ -1,0 +1,12 @@
+0. existing featues from the repo "https://github.com/SAP/e-mobility-charging-stations-simulator/tree/main"
+1. station dashboard
+2. dynamic prices(done)
+3. logs
+4. UI improvement
+5. RFID based station creation
+6. AC / DC charging support
+7. Phase-based configuration (1-phase / 3-phase)
+8. different connectors EVSE
+9. Power, current, voltage, energy sim
+
+npm, js/typescript, vite, python

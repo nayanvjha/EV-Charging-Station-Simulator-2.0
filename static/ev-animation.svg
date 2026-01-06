@@ -1,0 +1,89 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <!-- Gradient for energy flow -->
+    <linearGradient id="energyGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#4caf50;stop-opacity:0.3" />
+      <stop offset="50%" style="stop-color:#2196F3;stop-opacity:0.15" />
+      <stop offset="100%" style="stop-color:#4caf50;stop-opacity:0.3" />
+    </linearGradient>
+    
+    <!-- Glow filter -->
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    
+    <!-- Animations -->
+    <style>
+      @keyframes pulse-glow {
+        0%, 100% { opacity: 0.3; }
+        50% { opacity: 0.6; }
+      }
+      
+      @keyframes float-up {
+        0% { transform: translateY(0) translateX(0); opacity: 0; }
+        50% { opacity: 0.4; }
+        100% { transform: translateY(-100px) translateX(20px); opacity: 0; }
+      }
+      
+      @keyframes rotate-slow {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+      
+      @keyframes wave-motion {
+        0% { transform: translateX(0); }
+        50% { transform: translateX(10px); }
+        100% { transform: translateX(0); }
+      }
+      
+      .pulse-element { animation: pulse-glow 3s ease-in-out infinite; }
+      .float-element { animation: float-up 4s ease-in infinite; }
+      .rotate-element { animation: rotate-slow 20s linear infinite; }
+      .wave-element { animation: wave-motion 3s ease-in-out infinite; }
+    </style>
+  </defs>
+  
+  <!-- Base background -->
+  <rect width="1200" height="800" fill="#050816" opacity="0.95"/>
+  
+  <!-- Pulsing gradient orbs (energy sources) -->
+  <circle cx="150" cy="150" r="80" fill="url(#energyGradient)" class="pulse-element" filter="url(#glow)"/>
+  <circle cx="1050" cy="650" r="100" fill="url(#energyGradient)" class="pulse-element" style="animation-delay: 1s;" filter="url(#glow)"/>
+  <circle cx="600" cy="400" r="60" fill="url(#energyGradient)" class="pulse-element" style="animation-delay: 0.5s;" filter="url(#glow)"/>
+  
+  <!-- Floating energy particles -->
+  <g class="float-element" style="animation-delay: 0s;">
+    <circle cx="200" cy="700" r="5" fill="#4caf50" opacity="0.6"/>
+  </g>
+  <g class="float-element" style="animation-delay: 1s;">
+    <circle cx="400" cy="600" r="4" fill="#2196F3" opacity="0.5"/>
+  </g>
+  <g class="float-element" style="animation-delay: 2s;">
+    <circle cx="800" cy="300" r="5" fill="#4caf50" opacity="0.6"/>
+  </g>
+  <g class="float-element" style="animation-delay: 1.5s;">
+    <circle cx="100" cy="400" r="4" fill="#2196F3" opacity="0.5"/>
+  </g>
+  
+  <!-- EV Charging Icon (rotating) -->
+  <g transform="translate(600, 400)" class="rotate-element">
+    <circle cx="0" cy="0" r="50" fill="none" stroke="#4caf50" stroke-width="2" opacity="0.3"/>
+    <circle cx="0" cy="0" r="35" fill="none" stroke="#2196F3" stroke-width="1.5" opacity="0.2"/>
+    <!-- Lightning bolt symbol -->
+    <path d="M0,-15 L8,-5 L2,5 L10,25 L-5,8 L-8,18 Z" fill="#4caf50" opacity="0.4" filter="url(#glow)"/>
+  </g>
+  
+  <!-- Wave lines (energy flow) -->
+  <g stroke="#4caf50" stroke-width="2" fill="none" opacity="0.2">
+    <path d="M 0 200 Q 300 150 600 200 T 1200 200" class="wave-element"/>
+    <path d="M 0 600 Q 300 550 600 600 T 1200 600" class="wave-element" style="animation-delay: 0.5s;"/>
+  </g>
+  
+  <!-- Corner accents -->
+  <circle cx="50" cy="50" r="30" fill="none" stroke="#2196F3" stroke-width="1" opacity="0.2" class="pulse-element" style="animation-delay: 2s;"/>
+  <circle cx="1150" cy="750" r="40" fill="none" stroke="#4caf50" stroke-width="1" opacity="0.2" class="pulse-element" style="animation-delay: 1.5s;"/>
+</svg>
