@@ -1,0 +1,8 @@
+ocpp
+websockets
+pydantic
+fastapi
+uvicorn
+jinja2
+prometheus_client
+matplotlib

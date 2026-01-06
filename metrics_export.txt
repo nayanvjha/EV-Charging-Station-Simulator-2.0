@@ -1,0 +1,42 @@
+# HELP python_gc_objects_collected_total Objects collected during gc
+# TYPE python_gc_objects_collected_total counter
+python_gc_objects_collected_total{generation="0"} 1768.0
+python_gc_objects_collected_total{generation="1"} 251.0
+python_gc_objects_collected_total{generation="2"} 6.0
+# HELP python_gc_objects_uncollectable_total Uncollectable objects found during GC
+# TYPE python_gc_objects_uncollectable_total counter
+python_gc_objects_uncollectable_total{generation="0"} 0.0
+python_gc_objects_uncollectable_total{generation="1"} 0.0
+python_gc_objects_uncollectable_total{generation="2"} 0.0
+# HELP python_gc_collections_total Number of times this generation was collected
+# TYPE python_gc_collections_total counter
+python_gc_collections_total{generation="0"} 149.0
+python_gc_collections_total{generation="1"} 13.0
+python_gc_collections_total{generation="2"} 1.0
+# HELP python_info Python platform information
+# TYPE python_info gauge
+python_info{implementation="CPython",major="3",minor="11",patchlevel="7",version="3.11.7"} 1.0
+# HELP stations_total Total number of simulated stations
+# TYPE stations_total gauge
+stations_total 0.0
+# HELP stations_active Currently running stations
+# TYPE stations_active gauge
+stations_active 0.0
+# HELP transactions_total Total transactions started
+# TYPE transactions_total counter
+transactions_total 0.0
+# HELP transactions_created Total transactions started
+# TYPE transactions_created gauge
+transactions_created 1.7676771694477959e+09
+# HELP energy_dispensed_kwh_total Total energy delivered across all stations in kWh
+# TYPE energy_dispensed_kwh_total counter
+energy_dispensed_kwh_total 0.0
+# HELP energy_dispensed_kwh_created Total energy delivered across all stations in kWh
+# TYPE energy_dispensed_kwh_created gauge
+energy_dispensed_kwh_created 1.767677169447805e+09
+# HELP meter_values_total Total meter value updates across all stations
+# TYPE meter_values_total counter
+meter_values_total 0.0
+# HELP meter_values_created Total meter value updates across all stations
+# TYPE meter_values_created gauge
+meter_values_created 1.767677169447812e+09

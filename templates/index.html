@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>EV Station Simulator</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+
+<body>
+  <!-- Animated Background -->
+  <div class="animated-bg" id="animated-bg">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800" preserveAspectRatio="xMidYMid slice">
+      <defs>
+        <linearGradient id="energyGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" style="stop-color:#4caf50;stop-opacity:0.3" />
+          <stop offset="50%" style="stop-color:#2196F3;stop-opacity:0.15" />
+          <stop offset="100%" style="stop-color:#4caf50;stop-opacity:0.3" />
+        </linearGradient>
+        
+        <filter id="glow">
+          <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+          <feMerge>
+            <feMergeNode in="coloredBlur"/>
+            <feMergeNode in="SourceGraphic"/>
+          </feMerge>
+        </filter>
+        
+        <style>
+          @keyframes pulse-glow { 0%, 100% { opacity: 0.3; } 50% { opacity: 0.6; } }
+          @keyframes float-up { 0% { transform: translateY(0) translateX(0); opacity: 0; } 50% { opacity: 0.4; } 100% { transform: translateY(-100px) translateX(20px); opacity: 0; } }
+          @keyframes rotate-slow { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+          @keyframes wave-motion { 0% { transform: translateX(0); } 50% { transform: translateX(10px); } 100% { transform: translateX(0); } }
+          .pulse-element { animation: pulse-glow 3s ease-in-out infinite; }
+          .float-element { animation: float-up 4s ease-in infinite; }
+          .rotate-element { animation: rotate-slow 20s linear infinite; }
+          .wave-element { animation: wave-motion 3s ease-in-out infinite; }
+        </style>
+      </defs>
+      
+      <rect width="1200" height="800" fill="#050816" opacity="0.95"/>
+      
+      <circle cx="150" cy="150" r="80" fill="url(#energyGradient)" class="pulse-element" filter="url(#glow)"/>
+      <circle cx="1050" cy="650" r="100" fill="url(#energyGradient)" class="pulse-element" style="animation-delay: 1s;" filter="url(#glow)"/>
+      <circle cx="600" cy="400" r="60" fill="url(#energyGradient)" class="pulse-element" style="animation-delay: 0.5s;" filter="url(#glow)"/>
+      
+      <g class="float-element" style="animation-delay: 0s;">
+        <circle cx="200" cy="700" r="5" fill="#4caf50" opacity="0.6"/>
+      </g>
+      <g class="float-element" style="animation-delay: 1s;">
+        <circle cx="400" cy="600" r="4" fill="#2196F3" opacity="0.5"/>
+      </g>
+      <g class="float-element" style="animation-delay: 2s;">
+        <circle cx="800" cy="300" r="5" fill="#4caf50" opacity="0.6"/>
+      </g>
+      <g class="float-element" style="animation-delay: 1.5s;">
+        <circle cx="100" cy="400" r="4" fill="#2196F3" opacity="0.5"/>
+      </g>
+      
+      <g transform="translate(600, 400)" class="rotate-element">
+        <circle cx="0" cy="0" r="50" fill="none" stroke="#4caf50" stroke-width="2" opacity="0.3"/>
+        <circle cx="0" cy="0" r="35" fill="none" stroke="#2196F3" stroke-width="1.5" opacity="0.2"/>
+        <path d="M0,-15 L8,-5 L2,5 L10,25 L-5,8 L-8,18 Z" fill="#4caf50" opacity="0.4" filter="url(#glow)"/>
+      </g>
+      
+      <g stroke="#4caf50" stroke-width="2" fill="none" opacity="0.2">
+        <path d="M 0 200 Q 300 150 600 200 T 1200 200" class="wave-element"/>
+        <path d="M 0 600 Q 300 550 600 600 T 1200 600" class="wave-element" style="animation-delay: 0.5s;"/>
+      </g>
+      
+      <circle cx="50" cy="50" r="30" fill="none" stroke="#2196F3" stroke-width="1" opacity="0.2" class="pulse-element" style="animation-delay: 2s;"/>
+      <circle cx="1150" cy="750" r="40" fill="none" stroke="#4caf50" stroke-width="1" opacity="0.2" class="pulse-element" style="animation-delay: 1.5s;"/>
+    </svg>
+  </div>
+
+  <!-- Loading Spinner Overlay -->
+  <div class="spinner-overlay hidden" id="spinner-overlay">
+    <div class="spinner-container">
+      <div class="spinner"></div>
+      <div class="spinner-text" id="spinner-text">Launching stations…</div>
+      <div class="spinner-subtext" id="spinner-subtext">Please wait</div>
+    </div>
+  </div>
+
+  <div class="app">
+    <div class="glass-panel">
+
+      <!-- HEADER -->
+      <header>
+        <div class="title-group">
+          <h1>
+            <span class="title-dot"></span>
+            EV Station Simulator
+          </h1>
+          <p>Python OCPP 1.6J · Controller Dashboard</p>
+        </div>
+      </header>
+
+      <!-- STATS -->
+      <div class="stats-row">
+        <div class="stat-card">
+          <div class="stat-label">Total Stations</div>
+          <div class="stat-value" id="stat-total">0</div>
+        </div>
+
+        <div class="stat-card">
+          <div class="stat-label">Running</div>
+          <div class="stat-value" id="stat-running">0</div>
+        </div>
+
+        <div class="stat-card">
+          <div class="stat-label">Total Energy</div>
+          <div class="stat-value">
+            <span id="total-energy">0.000</span> kWh
+          </div>
+        </div>
+
+        <div class="stat-card">
+          <div class="stat-label">Total Earnings</div>
+          <div class="stat-value">
+            ₹<span id="total-earnings">0.00</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- CONTROLS -->
+      <div class="controls-grid">
+
+        <!-- SCALE -->
+        <div class="control-card">
+          <div class="field-row">
+            <div class="field">
+              <label>Target count</label>
+              <input type="number" id="scale-count" value="5" min="0">
+            </div>
+            <div class="field">
+              <label>Profile</label>
+              <select id="scale-profile">
+                <option value="default">default</option>
+                <option value="busy">busy</option>
+                <option value="idle">idle</option>
+                <option value="no-transactions">no-transactions</option>
+                <option value="flaky">flaky</option>
+              </select>
+            </div>
+          </div>
+          <div class="button-row">
+            <button class="btn-primary" onclick="scaleStations()">Apply scaling</button>
+          </div>
+        </div>
+
+        <!-- SINGLE -->
+        <div class="control-card">
+          <div class="field-row">
+            <div class="field">
+              <label>Station ID</label>
+              <input type="text" id="single-id" placeholder="PY-SIM-0001">
+            </div>
+            <div class="field">
+              <label>Profile</label>
+              <select id="single-profile">
+                <option value="default">default</option>
+                <option value="busy">busy</option>
+                <option value="idle">idle</option>
+                <option value="no-transactions">no-transactions</option>
+                <option value="flaky">flaky</option>
+              </select>
+            </div>
+          </div>
+          <div class="button-row">
+            <button class="btn-primary" onclick="startSingle()">Start</button>
+            <button class="btn-danger" onclick="stopSingle()">Stop</button>
+          </div>
+        </div>
+
+        <!-- BULK -->
+        <div class="control-card bulk-actions">
+          <div class="stat-label">Bulk actions</div>
+          <div class="stat-sub">All stations</div>
+          <div class="button-row bulk-buttons">
+            <button class="btn-primary bulk-btn" onclick="startAllStations()">Start all</button>
+            <button class="btn-danger bulk-btn" onclick="stopAllStations()">Stop all</button>
+          </div>
+
+        </div>
+        <!-- PRICE CONTROL -->
+        <div class="control-card">
+          <div class="stat-label">Charging Price</div>
+          <div class="stat-sub">₹ per kWh (applies immediately)</div>
+
+          <div class="price-box">
+            <span class="price-currency">₹</span>
+            <span class="price-big" id="current-price">20</span>
+            <span class="price-unit">/ kWh</span>
+          </div>
+
+          <div class="button-row">
+            <button class="btn-ghost" onclick="decreasePrice()">−</button>
+            <button class="btn-primary" onclick="increasePrice()">+</button>
+            <button class="btn-danger" onclick="resetPrice()">Reset</button>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- TABLE -->
+      <div class="table-card">
+        <table>
+          <thead>
+            <tr>
+              <th>Station ID</th>
+              <th>Profile</th>
+              <th>Status</th>
+              <th>Usage (kW)</th>
+              <th>Energy (kWh)</th>
+              <th>Smart Charging</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="stations-body"></tbody>
+        </table>
+      </div>
+
+    </div>
+
+    <div class="error-toast" id="error-toast">
+      <span id="error-message"></span>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
