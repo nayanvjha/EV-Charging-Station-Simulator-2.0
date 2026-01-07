@@ -6,3 +6,5 @@ uvicorn
 jinja2
 prometheus_client
 matplotlib
+pytest
+pytest-asyncio

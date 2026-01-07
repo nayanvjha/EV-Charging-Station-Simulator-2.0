@@ -5,11 +5,138 @@ from datetime import datetime, timezone
 import websockets
 from ocpp.routing import on
 from ocpp.v16 import ChargePoint as CP
-from ocpp.v16 import call_result
+from ocpp.v16 import call, call_result
 from ocpp.v16.enums import RegistrationStatus
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("csms")
+
+
+# ============================================================================
+# HELPER FUNCTIONS - OCPP Smart Charging Profile Generators
+# ============================================================================
+
+def create_charge_point_max_profile(profile_id: int, max_power_w: float) -> dict:
+    """
+    Create a ChargePointMaxProfile limiting total station power.
+    
+    Args:
+        profile_id: Unique profile identifier
+        max_power_w: Maximum power limit in watts
+        
+    Returns:
+        OCPP profile dict ready for SetChargingProfile
+        
+    Example:
+        >>> profile = create_charge_point_max_profile(1, 22000)
+        >>> # Limits entire charge point to 22kW
+    """
+    return {
+        "chargingProfileId": profile_id,
+        "stackLevel": 0,
+        "chargingProfilePurpose": "ChargePointMaxProfile",
+        "chargingProfileKind": "Absolute",
+        "chargingSchedule": {
+            "chargingRateUnit": "W",
+            "chargingSchedulePeriod": [
+                {"startPeriod": 0, "limit": max_power_w}
+            ],
+            "startSchedule": datetime.now(timezone.utc).isoformat()
+        }
+    }
+
+
+def create_time_of_use_profile(
+    profile_id: int,
+    off_peak_w: float,
+    peak_w: float,
+    peak_start_hour: int,
+    peak_end_hour: int
+) -> dict:
+    """
+    Create a daily recurring TxDefaultProfile with off-peak and peak limits.
+    
+    Args:
+        profile_id: Unique profile identifier
+        off_peak_w: Power limit during off-peak hours (watts)
+        peak_w: Power limit during peak hours (watts)
+        peak_start_hour: Hour when peak period starts (0-23)
+        peak_end_hour: Hour when peak period ends (0-23)
+        
+    Returns:
+        OCPP profile dict with daily recurring schedule
+        
+    Example:
+        >>> profile = create_time_of_use_profile(2, 11000, 7000, 8, 18)
+        >>> # 11kW off-peak, 7kW during 8am-6pm peak hours
+    """
+    # Calculate seconds from midnight
+    peak_start_seconds = peak_start_hour * 3600
+    peak_end_seconds = peak_end_hour * 3600
+    
+    # Start schedule at midnight today
+    start_time = datetime.now(timezone.utc).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
+    
+    return {
+        "chargingProfileId": profile_id,
+        "stackLevel": 0,
+        "chargingProfilePurpose": "TxDefaultProfile",
+        "chargingProfileKind": "Recurring",
+        "recurrencyKind": "Daily",
+        "chargingSchedule": {
+            "chargingRateUnit": "W",
+            "chargingSchedulePeriod": [
+                {"startPeriod": 0, "limit": off_peak_w},  # Midnight to peak start
+                {"startPeriod": peak_start_seconds, "limit": peak_w},  # Peak hours
+                {"startPeriod": peak_end_seconds, "limit": off_peak_w}  # Peak end to midnight
+            ],
+            "startSchedule": start_time.isoformat(),
+            "duration": 86400  # 24 hours
+        }
+    }
+
+
+def create_energy_cap_profile(
+    profile_id: int,
+    transaction_id: int,
+    max_energy_wh: float,
+    duration_seconds: int,
+    power_limit_w: float = 11000
+) -> dict:
+    """
+    Create a TxProfile for a specific transaction with power limit and duration.
+    
+    Args:
+        profile_id: Unique profile identifier
+        transaction_id: Transaction this profile applies to
+        max_energy_wh: Maximum energy to dispense (Wh)
+        duration_seconds: Profile duration in seconds
+        power_limit_w: Power limit in watts (default 11kW)
+        
+    Returns:
+        OCPP profile dict for specific transaction
+        
+    Example:
+        >>> profile = create_energy_cap_profile(3, 1234, 30000, 7200, 11000)
+        >>> # Limit transaction 1234 to 30kWh over 2 hours at 11kW max
+    """
+    return {
+        "chargingProfileId": profile_id,
+        "transactionId": transaction_id,
+        "stackLevel": 0,
+        "chargingProfilePurpose": "TxProfile",
+        "chargingProfileKind": "Absolute",
+        "chargingSchedule": {
+            "chargingRateUnit": "W",
+            "chargingSchedulePeriod": [
+                {"startPeriod": 0, "limit": power_limit_w}
+            ],
+            "startSchedule": datetime.now(timezone.utc).isoformat(),
+            "duration": duration_seconds
+        }
+    }
 
 
 class CentralSystemChargePoint(CP):
@@ -71,6 +198,218 @@ class CentralSystemChargePoint(CP):
         return call_result.StopTransaction(
             id_tag_info={"status": "Accepted"},
         )
+
+    # ========================================================================
+    # CSMS-Initiated SmartCharging Operations (Testing Helpers)
+    # ========================================================================
+
+    async def send_charging_profile_to_station(
+        self,
+        connector_id: int,
+        profile_dict: dict
+    ) -> dict:
+        """
+        Send a charging profile to the station via SetChargingProfile.req.
+        
+        Args:
+            connector_id: Connector to set profile on (0 = charge point level)
+            profile_dict: Complete OCPP charging profile dictionary
+            
+        Returns:
+            Response dict with 'status' or error information
+            
+        Example:
+            >>> profile = create_charge_point_max_profile(1, 22000)
+            >>> response = await csms.send_charging_profile_to_station(0, profile)
+            >>> print(response['status'])  # 'Accepted' or 'Rejected'
+        """
+        try:
+            logger.info(
+                f"{self.id}: Sending SetChargingProfile to connector {connector_id}, "
+                f"profile_id={profile_dict.get('chargingProfileId')}"
+            )
+            
+            request = call.SetChargingProfile(
+                connector_id=connector_id,
+                cs_charging_profiles=profile_dict
+            )
+            
+            response = await self.call(request)
+            
+            logger.info(
+                f"{self.id}: SetChargingProfile response: {response.status}"
+            )
+            
+            return {
+                "status": response.status,
+                "connector_id": connector_id,
+                "profile_id": profile_dict.get('chargingProfileId')
+            }
+            
+        except Exception as e:
+            logger.exception(
+                f"{self.id}: SetChargingProfile failed: {e}"
+            )
+            return {
+                "status": "Error",
+                "error": str(e),
+                "connector_id": connector_id
+            }
+
+    async def request_composite_schedule_from_station(
+        self,
+        connector_id: int,
+        duration: int,
+        charging_rate_unit: str = "W"
+    ) -> dict:
+        """
+        Request the composite charging schedule from the station.
+        
+        Args:
+            connector_id: Connector to get schedule for
+            duration: Duration in seconds for the schedule
+            charging_rate_unit: Rate unit ('W' for Watts, 'A' for Amps)
+            
+        Returns:
+            Response dict with status, schedule, and metadata
+            
+        Example:
+            >>> response = await csms.request_composite_schedule_from_station(1, 3600)
+            >>> if response['status'] == 'Accepted':
+            ...     schedule = response['chargingSchedule']
+        """
+        try:
+            logger.info(
+                f"{self.id}: Requesting GetCompositeSchedule from connector {connector_id}, "
+                f"duration={duration}s, unit={charging_rate_unit}"
+            )
+            
+            request = call.GetCompositeSchedule(
+                connector_id=connector_id,
+                duration=duration,
+                charging_rate_unit=charging_rate_unit
+            )
+            
+            response = await self.call(request)
+            
+            logger.info(
+                f"{self.id}: GetCompositeSchedule response: {response.status}"
+            )
+            
+            result = {
+                "status": response.status,
+                "connector_id": getattr(response, 'connector_id', connector_id)
+            }
+            
+            # Add schedule if accepted
+            if response.status == "Accepted" and hasattr(response, 'charging_schedule'):
+                result["schedule_start"] = getattr(response, 'schedule_start', None)
+                result["chargingSchedule"] = response.charging_schedule
+                
+                # Count periods for logging
+                periods = response.charging_schedule.get('chargingSchedulePeriod', [])
+                logger.info(
+                    f"{self.id}: Received composite schedule with {len(periods)} periods"
+                )
+            
+            return result
+            
+        except Exception as e:
+            logger.exception(
+                f"{self.id}: GetCompositeSchedule failed: {e}"
+            )
+            return {
+                "status": "Error",
+                "error": str(e),
+                "connector_id": connector_id
+            }
+
+    async def clear_charging_profile_from_station(
+        self,
+        profile_id: int = None,
+        connector_id: int = None,
+        purpose: str = None,
+        stack_level: int = None
+    ) -> dict:
+        """
+        Clear charging profiles from the station with optional filters.
+        
+        Args:
+            profile_id: Specific profile ID to clear (optional)
+            connector_id: Connector to clear profiles from (optional, 0 = all)
+            purpose: Profile purpose filter (optional)
+            stack_level: Stack level filter (optional)
+            
+        Returns:
+            Response dict with status and number of profiles cleared
+            
+        Example:
+            >>> # Clear all profiles on connector 1
+            >>> response = await csms.clear_charging_profile_from_station(connector_id=1)
+            >>> 
+            >>> # Clear specific profile
+            >>> response = await csms.clear_charging_profile_from_station(profile_id=1)
+            >>> 
+            >>> # Clear all TxDefaultProfile profiles
+            >>> response = await csms.clear_charging_profile_from_station(
+            ...     purpose="TxDefaultProfile"
+            ... )
+        """
+        try:
+            # Build filter description for logging
+            filters = []
+            if profile_id is not None:
+                filters.append(f"profile_id={profile_id}")
+            if connector_id is not None:
+                filters.append(f"connector_id={connector_id}")
+            if purpose is not None:
+                filters.append(f"purpose={purpose}")
+            if stack_level is not None:
+                filters.append(f"stack_level={stack_level}")
+            
+            filter_str = ", ".join(filters) if filters else "no filters (all profiles)"
+            
+            logger.info(
+                f"{self.id}: Sending ClearChargingProfile with {filter_str}"
+            )
+            
+            # Build request with optional parameters
+            request_params = {}
+            if profile_id is not None:
+                request_params['id'] = profile_id
+            if connector_id is not None:
+                request_params['connector_id'] = connector_id
+            if purpose is not None:
+                request_params['charging_profile_purpose'] = purpose
+            if stack_level is not None:
+                request_params['stack_level'] = stack_level
+            
+            request = call.ClearChargingProfile(**request_params)
+            
+            response = await self.call(request)
+            
+            logger.info(
+                f"{self.id}: ClearChargingProfile response: {response.status}"
+            )
+            
+            return {
+                "status": response.status,
+                "filters": {
+                    "profile_id": profile_id,
+                    "connector_id": connector_id,
+                    "purpose": purpose,
+                    "stack_level": stack_level
+                }
+            }
+            
+        except Exception as e:
+            logger.exception(
+                f"{self.id}: ClearChargingProfile failed: {e}"
+            )
+            return {
+                "status": "Error",
+                "error": str(e)
+            }
 
 
 async def on_connect(connection):

@@ -11,8 +11,10 @@ from ocpp.v16.enums import (
     RegistrationStatus,
     ChargePointStatus,
     ChargePointErrorCode,
+    ChargingProfileStatus,
+    ClearChargingProfileStatus,
 )
-from ocpp.v16 import call
+from ocpp.v16 import call, call_result
 
 from profiles import StationProfile
 from metrics import (
@@ -23,6 +25,14 @@ from metrics import (
     record_meter_value,
 )
 from charging_policy import evaluate_charging_policy, evaluate_meter_value_decision
+
+# OCPP 1.6 SmartCharging imports
+from charging_profile_manager import (
+    ChargingProfileManager,
+    parse_charging_profile,
+    ChargingRateUnit,
+    ChargingProfilePurpose,
+)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("station")
@@ -42,8 +52,13 @@ class SimulatedChargePoint(CP):
         self.current_transaction_id = None
         # Initialize log buffer with max 50 entries
         self.log_buffer = deque(maxlen=50)
+        
+        # OCPP 1.6 SmartCharging: Initialize profile manager
+        self.profile_manager = ChargingProfileManager()
+        
         # Log startup
         self.log("Station initialized")
+        self.log("SmartCharging profile manager initialized")
 
     def log(self, message: str) -> None:
         """
@@ -83,6 +98,390 @@ class SimulatedChargePoint(CP):
     async def on_remote_stop_transaction(self, transaction_id, **kwargs):
         logger.info(f"{self.id}: RemoteStopTransaction for tx {transaction_id}")
         return {"status": "Accepted"}
+
+    # -------------------- OCPP 1.6 SMARTCHARGING HANDLERS --------------------
+
+    @on("SetChargingProfile")
+    async def on_set_charging_profile(self, connector_id: int, cs_charging_profiles: dict, **kwargs):
+        """
+        Handle SetChargingProfile.req from CSMS.
+        
+        Parses the charging profile, validates it, and stores it in the profile manager.
+        Returns Accepted or Rejected status based on validation and storage result.
+        
+        Args:
+            connector_id: Connector to set profile on (0 = charge point level)
+            cs_charging_profiles: Charging profile dictionary from OCPP message
+            **kwargs: Additional OCPP parameters
+            
+        Returns:
+            SetChargingProfile.conf with status
+        """
+        try:
+            # Parse the charging profile from OCPP dict
+            profile = parse_charging_profile(cs_charging_profiles)
+            
+            # Add profile to manager
+            success, message = self.profile_manager.add_profile(connector_id, profile)
+            
+            if success:
+                logger.info(
+                    f"{self.id}: SetChargingProfile accepted - profile {profile.charging_profile_id} "
+                    f"on connector {connector_id}"
+                )
+                self.log(
+                    f"SetChargingProfile accepted: profile {profile.charging_profile_id} "
+                    f"(purpose={profile.charging_profile_purpose.value}, "
+                    f"stackLevel={profile.stack_level})"
+                )
+                return call_result.SetChargingProfile(
+                    status=ChargingProfileStatus.accepted
+                )
+            else:
+                logger.warning(
+                    f"{self.id}: SetChargingProfile rejected - {message}"
+                )
+                self.log(f"SetChargingProfile rejected: {message}")
+                return call_result.SetChargingProfile(
+                    status=ChargingProfileStatus.rejected
+                )
+                
+        except Exception as e:
+            logger.exception(f"{self.id}: SetChargingProfile error: {e}")
+            self.log(f"SetChargingProfile error: {str(e)}")
+            return call_result.SetChargingProfile(
+                status=ChargingProfileStatus.rejected
+            )
+
+    @on("GetCompositeSchedule")
+    async def on_get_composite_schedule(self, connector_id: int, duration: int, **kwargs):
+        """
+        Handle GetCompositeSchedule.req from CSMS.
+        
+        Calculates the composite schedule by merging all applicable profiles
+        for the requested connector and duration.
+        
+        Args:
+            connector_id: Connector to get schedule for
+            duration: Duration in seconds for the schedule
+            **kwargs: Additional OCPP parameters including optional chargingRateUnit
+            
+        Returns:
+            GetCompositeSchedule.conf with schedule or Rejected status
+        """
+        try:
+            # Extract optional chargingRateUnit, default to "W"
+            rate_unit_str = kwargs.get("charging_rate_unit", "W")
+            try:
+                rate_unit = ChargingRateUnit(rate_unit_str)
+            except ValueError:
+                rate_unit = ChargingRateUnit.WATTS
+            
+            # Get composite schedule
+            schedule = self.profile_manager.get_composite_schedule(
+                connector_id=connector_id,
+                duration=duration,
+                charging_rate_unit=rate_unit
+            )
+            
+            if schedule:
+                # Convert schedule to OCPP dict format
+                schedule_dict = schedule.to_dict()
+                schedule_start = datetime.now(timezone.utc).isoformat()
+                
+                logger.info(
+                    f"{self.id}: GetCompositeSchedule accepted - "
+                    f"{len(schedule.charging_schedule_period)} periods for connector {connector_id}"
+                )
+                self.log(
+                    f"GetCompositeSchedule: {len(schedule.charging_schedule_period)} periods "
+                    f"for {duration}s on connector {connector_id}"
+                )
+                
+                return call_result.GetCompositeSchedule(
+                    status="Accepted",
+                    connector_id=connector_id,
+                    schedule_start=schedule_start,
+                    charging_schedule=schedule_dict
+                )
+            else:
+                logger.info(
+                    f"{self.id}: GetCompositeSchedule rejected - no applicable profiles"
+                )
+                self.log(f"GetCompositeSchedule rejected: no profiles for connector {connector_id}")
+                return call_result.GetCompositeSchedule(status="Rejected")
+                
+        except Exception as e:
+            logger.exception(f"{self.id}: GetCompositeSchedule error: {e}")
+            self.log(f"GetCompositeSchedule error: {str(e)}")
+            return call_result.GetCompositeSchedule(status="Rejected")
+
+    @on("ClearChargingProfile")
+    async def on_clear_charging_profile(self, **kwargs):
+        """
+        Handle ClearChargingProfile.req from CSMS.
+        
+        Removes charging profiles matching the provided criteria.
+        Uses AND logic for all filters.
+        
+        Args:
+            **kwargs: Optional filters:
+                - id: Specific profile ID to remove
+                - connector_id: Connector to clear profiles from (0 = all)
+                - charging_profile_purpose: Purpose filter
+                - stack_level: Stack level filter
+                
+        Returns:
+            ClearChargingProfile.conf with Accepted or Unknown status
+        """
+        try:
+            # Extract optional filters from kwargs
+            profile_id = kwargs.get("id")
+            connector_id = kwargs.get("connector_id", 0)
+            purpose_str = kwargs.get("charging_profile_purpose")
+            stack_level = kwargs.get("stack_level")
+            
+            # Convert purpose string to enum if provided
+            purpose = None
+            if purpose_str:
+                try:
+                    purpose = ChargingProfilePurpose(purpose_str)
+                except ValueError:
+                    logger.warning(f"{self.id}: Invalid charging_profile_purpose: {purpose_str}")
+            
+            total_cleared = 0
+            
+            # If connector_id is 0, clear from all connectors
+            if connector_id == 0:
+                for conn_id in self.profile_manager.get_all_connector_ids():
+                    cleared = self.profile_manager.clear_profile(
+                        connector_id=conn_id,
+                        profile_id=profile_id,
+                        purpose=purpose,
+                        stack_level=stack_level
+                    )
+                    total_cleared += cleared
+            else:
+                total_cleared = self.profile_manager.clear_profile(
+                    connector_id=connector_id,
+                    profile_id=profile_id,
+                    purpose=purpose,
+                    stack_level=stack_level
+                )
+            
+            logger.info(f"{self.id}: ClearChargingProfile - cleared {total_cleared} profiles")
+            self.log(f"ClearChargingProfile: cleared {total_cleared} profiles")
+            
+            if total_cleared > 0:
+                return call_result.ClearChargingProfile(
+                    status=ClearChargingProfileStatus.accepted
+                )
+            else:
+                return call_result.ClearChargingProfile(
+                    status=ClearChargingProfileStatus.unknown
+                )
+                
+        except Exception as e:
+            logger.exception(f"{self.id}: ClearChargingProfile error: {e}")
+            self.log(f"ClearChargingProfile error: {str(e)}")
+            return call_result.ClearChargingProfile(
+                status=ClearChargingProfileStatus.unknown
+            )
+
+    # ========================================================================
+    # SmartCharging API Methods (Direct profile management without CSMS)
+    # ========================================================================
+
+    async def send_charging_profile_to_station(
+        self,
+        connector_id: int,
+        profile_dict: dict
+    ) -> dict:
+        """
+        Add a charging profile directly to the station's profile manager.
+        
+        This method provides a direct interface for setting profiles without
+        going through OCPP message handlers, useful for REST API integration.
+        
+        Args:
+            connector_id: Connector to set profile on (0 = charge point level)
+            profile_dict: Complete OCPP charging profile dictionary
+            
+        Returns:
+            Response dict with 'status' or error information
+        """
+        try:
+            # Parse the charging profile from dict
+            profile = parse_charging_profile(profile_dict)
+            
+            # Add profile to manager
+            success, message = self.profile_manager.add_profile(connector_id, profile)
+            
+            if success:
+                logger.info(
+                    f"{self.id}: Profile {profile.charging_profile_id} added to connector {connector_id}"
+                )
+                self.log(
+                    f"Profile {profile.charging_profile_id} accepted "
+                    f"(purpose={profile.charging_profile_purpose.value}, "
+                    f"stackLevel={profile.stack_level})"
+                )
+                return {
+                    "status": "Accepted",
+                    "connector_id": connector_id,
+                    "profile_id": profile.charging_profile_id
+                }
+            else:
+                logger.warning(f"{self.id}: Profile rejected - {message}")
+                self.log(f"Profile rejected: {message}")
+                return {
+                    "status": "Rejected",
+                    "error": message
+                }
+                
+        except Exception as e:
+            logger.exception(f"{self.id}: send_charging_profile_to_station error: {e}")
+            self.log(f"Profile error: {str(e)}")
+            return {
+                "status": "Error",
+                "error": str(e)
+            }
+
+    async def request_composite_schedule_from_station(
+        self,
+        connector_id: int,
+        duration: int,
+        charging_rate_unit: str = "W"
+    ) -> dict:
+        """
+        Get the composite schedule for a connector.
+        
+        Args:
+            connector_id: Connector to get schedule for
+            duration: Duration in seconds
+            charging_rate_unit: "W" for watts or "A" for amps
+            
+        Returns:
+            Response dict with schedule or error information
+        """
+        try:
+            from charging_profile_manager import ChargingRateUnit
+            
+            unit = ChargingRateUnit.W if charging_rate_unit == "W" else ChargingRateUnit.A
+            schedule = self.profile_manager.get_composite_schedule(
+                connector_id=connector_id,
+                duration=duration,
+                charging_rate_unit=unit
+            )
+            
+            if schedule:
+                schedule_dict = {
+                    "chargingRateUnit": schedule.chargingRateUnit.value,
+                    "chargingSchedulePeriod": [
+                        {
+                            "startPeriod": p.startPeriod,
+                            "limit": p.limit,
+                            "numberPhases": p.numberPhases
+                        }
+                        for p in schedule.chargingSchedulePeriod
+                    ]
+                }
+                if schedule.duration:
+                    schedule_dict["duration"] = schedule.duration
+                if schedule.startSchedule:
+                    schedule_dict["startSchedule"] = schedule.startSchedule.isoformat()
+                if schedule.minChargingRate:
+                    schedule_dict["minChargingRate"] = schedule.minChargingRate
+                
+                return {
+                    "status": "Accepted",
+                    "connector_id": connector_id,
+                    "schedule": schedule_dict
+                }
+            else:
+                return {
+                    "status": "Rejected",
+                    "connector_id": connector_id,
+                    "error": "No applicable profiles"
+                }
+                
+        except Exception as e:
+            logger.exception(f"{self.id}: request_composite_schedule_from_station error: {e}")
+            return {
+                "status": "Error",
+                "error": str(e)
+            }
+
+    async def clear_charging_profile_from_station(
+        self,
+        profile_id: int = None,
+        connector_id: int = None,
+        purpose: str = None,
+        stack_level: int = None
+    ) -> dict:
+        """
+        Clear charging profiles from the station.
+        
+        Args:
+            profile_id: Specific profile ID to remove
+            connector_id: Connector to clear profiles from (None = all)
+            purpose: Purpose filter ("ChargePointMaxProfile", "TxDefaultProfile", "TxProfile")
+            stack_level: Stack level filter
+            
+        Returns:
+            Response dict with status
+        """
+        try:
+            # Convert purpose string to enum if provided
+            purpose_enum = None
+            if purpose:
+                try:
+                    purpose_enum = ChargingProfilePurpose(purpose)
+                except ValueError:
+                    logger.warning(f"{self.id}: Invalid purpose: {purpose}")
+            
+            total_cleared = 0
+            
+            # If no connector specified, clear from all connectors
+            if connector_id is None:
+                for conn_id in self.profile_manager.get_all_connector_ids():
+                    cleared = self.profile_manager.clear_profile(
+                        connector_id=conn_id,
+                        profile_id=profile_id,
+                        purpose=purpose_enum,
+                        stack_level=stack_level
+                    )
+                    total_cleared += cleared
+                # Also clear connector 0 (charge point level)
+                cleared = self.profile_manager.clear_profile(
+                    connector_id=0,
+                    profile_id=profile_id,
+                    purpose=purpose_enum,
+                    stack_level=stack_level
+                )
+                total_cleared += cleared
+            else:
+                total_cleared = self.profile_manager.clear_profile(
+                    connector_id=connector_id,
+                    profile_id=profile_id,
+                    purpose=purpose_enum,
+                    stack_level=stack_level
+                )
+            
+            logger.info(f"{self.id}: Cleared {total_cleared} profiles")
+            self.log(f"Cleared {total_cleared} charging profiles")
+            
+            return {
+                "status": "Accepted" if total_cleared > 0 else "Unknown",
+                "cleared_count": total_cleared
+            }
+                
+        except Exception as e:
+            logger.exception(f"{self.id}: clear_charging_profile_from_station error: {e}")
+            return {
+                "status": "Error",
+                "error": str(e)
+            }
 
 
 # =========================================================
@@ -244,57 +643,88 @@ async def simulate_station(
             self_energy = 0
             max_energy_wh = int(profile.max_energy_kwh * 1000)  # Convert kWh to Wh
 
-            # -------- MeterValues Loop (Smart Charging Policy Engine) --------
+            # -------- MeterValues Loop (OCPP Smart Charging + Legacy Policy) --------
             # Loop until energy limit is reached or random iterations completed
             max_iterations = random.randint(3, 8)
             for iteration in range(max_iterations):
-                await asyncio.sleep(
-                    random.randint(
-                        profile.sample_interval_min,
-                        profile.sample_interval_max,
-                    )
+                sample_interval_seconds = random.randint(
+                    profile.sample_interval_min,
+                    profile.sample_interval_max,
                 )
+                await asyncio.sleep(sample_interval_seconds)
 
-                # Evaluate meter value decision using policy engine
-                meter_decision = evaluate_meter_value_decision(
-                    station_state={
-                        "energy_dispensed": self_energy / 1000,  # Convert Wh to kWh
-                        "charging": True,
-                        "session_active": True
-                    },
-                    profile={
-                        "charge_if_price_below": profile.charge_if_price_below,
-                        "max_energy_kwh": profile.max_energy_kwh,
-                        "allow_peak_hours": profile.allow_peak,
-                        "peak_hours": profile.peak_hours
-                    },
-                    env={
-                        "current_price": current_price_val,
-                        "hour": current_hour
-                    },
-                    current_energy_wh=self_energy,
-                    max_energy_wh=max_energy_wh
+                # ========== OCPP SMART CHARGING PROFILE LIMITS ==========
+                # Check if OCPP charging profile limits are active
+                profile_limit_w = self.profile_manager.get_current_limit(
+                    connector_id=connector_id,
+                    transaction_id=transaction_id
                 )
                 
-                # Check if policy requires stopping
-                if meter_decision["action"] == "stop":
-                    logger.info(f"{station_id}: {meter_decision['reason']}")
-                    cp.log(f"{meter_decision['reason']} — stopping")
-                    # Send final meter value if needed, then break
-                    break
+                # Calculate base energy step using existing random range
+                base_step = random.randint(
+                    profile.energy_step_min,
+                    profile.energy_step_max,
+                )
                 
-                # Use smart charging to adjust energy step during peak
-                if is_peak_hour(current_hour, profile.peak_hours) and profile.allow_peak:
-                    base_step = random.randint(
-                        profile.energy_step_min,
-                        profile.energy_step_max,
-                    )
-                    energy_step = max(int(base_step * 0.5), 10)
+                # Apply OCPP profile limits if active (takes absolute precedence)
+                if profile_limit_w is not None:
+                    # Convert watts to Wh based on sample interval
+                    max_step_wh = profile_limit_w * (sample_interval_seconds / 3600)
+                    energy_step = min(base_step, max_step_wh)
+                    
+                    if energy_step < base_step:
+                        logger.info(
+                            f"{station_id}: OCPP profile limiting charge to {profile_limit_w:.0f}W "
+                            f"(step reduced from {base_step:.0f} to {energy_step:.0f} Wh)"
+                        )
+                        cp.log(
+                            f"OCPP limit: {profile_limit_w:.0f}W → {energy_step:.0f}Wh this interval"
+                        )
+                    else:
+                        logger.info(
+                            f"{station_id}: OCPP profile allows up to {profile_limit_w:.0f}W "
+                            f"(using base step {energy_step:.0f} Wh)"
+                        )
                 else:
-                    energy_step = random.randint(
-                        profile.energy_step_min,
-                        profile.energy_step_max,
+                    # ========== LEGACY CHARGING POLICY (fallback when no OCPP profiles) ==========
+                    logger.debug(f"{station_id}: No OCPP profiles active, using legacy policy")
+                    
+                    # Evaluate meter value decision using legacy policy engine
+                    meter_decision = evaluate_meter_value_decision(
+                        station_state={
+                            "energy_dispensed": self_energy / 1000,  # Convert Wh to kWh
+                            "charging": True,
+                            "session_active": True
+                        },
+                        profile={
+                            "charge_if_price_below": profile.charge_if_price_below,
+                            "max_energy_kwh": profile.max_energy_kwh,
+                            "allow_peak_hours": profile.allow_peak,
+                            "peak_hours": profile.peak_hours
+                        },
+                        env={
+                            "current_price": current_price_val,
+                            "hour": current_hour
+                        },
+                        current_energy_wh=self_energy,
+                        max_energy_wh=max_energy_wh
                     )
+                    
+                    # Check if legacy policy requires stopping
+                    if meter_decision["action"] == "stop":
+                        logger.info(f"{station_id}: Legacy policy stopping - {meter_decision['reason']}")
+                        cp.log(f"Legacy policy: {meter_decision['reason']} — stopping")
+                        break
+                    
+                    # Apply legacy smart charging adjustment during peak hours
+                    if is_peak_hour(current_hour, profile.peak_hours) and profile.allow_peak:
+                        energy_step = max(int(base_step * 0.5), 10)
+                        logger.info(
+                            f"{station_id}: Legacy policy peak reduction "
+                            f"(step reduced from {base_step} to {energy_step} Wh)"
+                        )
+                    else:
+                        energy_step = base_step
                 
                 self_energy += energy_step
 

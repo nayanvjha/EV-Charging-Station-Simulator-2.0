@@ -126,6 +126,36 @@
       <!-- CONTROLS -->
       <div class="controls-grid">
 
+        <!-- SMARTCHARGING PROFILE MANAGEMENT -->
+        <div class="control-card smartcharging-panel">
+          <div class="stat-label">⚡ SmartCharging Profiles</div>
+          <div class="stat-sub">Send test profiles to active stations</div>
+          
+          <div class="field">
+            <label>Target Station</label>
+            <select id="sc-station-select">
+              <option value="">Select a station...</option>
+            </select>
+          </div>
+          
+          <div class="button-row">
+            <button class="btn-sc-limit" onclick="sendTestProfile('peak_shaving', 7400)" title="Limit to 7.4kW">
+               7.4kW
+            </button>
+            <button class="btn-sc-tou" onclick="sendTestProfile('time_of_use')" title="Time-of-Use (18:00-22:00)">
+               TOU
+            </button>
+            <button class="btn-sc-cap" onclick="sendTestProfile('energy_cap', 30000)" title="Energy Cap 30kWh">
+               30kWh
+            </button>
+          </div>
+          
+          <div class="button-row">
+            <button class="btn-ghost" onclick="viewProfiles()">📋 View Profiles</button>
+            <button class="btn-danger" onclick="clearAllProfiles()">🗑️ Clear All</button>
+          </div>
+        </div>
+
         <!-- SCALE -->
         <div class="control-card">
           <div class="field-row">
@@ -213,6 +243,7 @@
               <th>Status</th>
               <th>Usage (kW)</th>
               <th>Energy (kWh)</th>
+              <th>OCPP Status</th>
               <th>Smart Charging</th>
               <th>Actions</th>
             </tr>
@@ -221,10 +252,51 @@
         </table>
       </div>
 
+      <!-- PROFILE VIEWER MODAL -->
+      <div class="modal-overlay hidden" id="profile-modal-overlay">
+        <div class="modal-content profile-modal">
+          <div class="modal-header">
+            <h3>⚡ Charging Profiles</h3>
+            <button class="btn-close" onclick="closeProfileModal()">✕</button>
+          </div>
+          
+          <div class="modal-body">
+            <div class="profile-station-info">
+              <strong>Station:</strong> <span id="profile-modal-station">-</span>
+              <strong>Connector:</strong> <span id="profile-modal-connector">1</span>
+            </div>
+            
+            <div class="profile-section">
+              <h4>Active Profiles</h4>
+              <div id="profile-list" class="profile-list">
+                <div class="profile-loading">Loading profiles...</div>
+              </div>
+            </div>
+            
+            <div class="profile-section">
+              <h4>Composite Schedule</h4>
+              <div id="composite-schedule" class="composite-schedule">
+                <div class="profile-loading">Loading schedule...</div>
+              </div>
+            </div>
+          </div>
+          
+          <div class="modal-footer">
+            <button class="btn-ghost" onclick="refreshProfileModal()">🔄 Refresh</button>
+            <button class="btn-danger" onclick="clearProfilesFromModal()">🗑️ Clear All</button>
+            <button class="btn-primary" onclick="closeProfileModal()">Close</button>
+          </div>
+        </div>
+      </div>
+
     </div>
 
     <div class="error-toast" id="error-toast">
       <span id="error-message"></span>
+    </div>
+    
+    <div class="success-toast" id="success-toast">
+      <span id="success-message"></span>
     </div>
   </div>
 
