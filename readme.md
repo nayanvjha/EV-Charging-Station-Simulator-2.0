@@ -82,7 +82,7 @@ Example: An "idle" profile with `charge_if_price_below=18` won't start charging 
 
 ### 1. Clone the repository
 ```bash
-git clone https://github.com/prakashdebroy/ev_charging_sim.git
+
 cd ev_charging_sim
 ```
 
@@ -432,6 +432,7 @@ Then import into:
 - **Grafana** – interactive dashboards
 - **Power BI** – advanced business analytics
 - **Excel** – manual analysis  
+
 
 
 
