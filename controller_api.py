@@ -24,6 +24,7 @@ from csms_server import (
     create_time_of_use_profile,
     create_energy_cap_profile,
 )
+from db import init_db, get_station_history as db_get_station_history, list_sessions
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("controller_api")
@@ -291,6 +292,7 @@ async def update_energy_and_usage():
 
 @app.on_event("startup")
 async def startup():
+    init_db()
     # Start Prometheus metrics server on port 9100
     try:
         start_http_server(9100)
@@ -362,6 +364,25 @@ async def get_station_logs(station_id: str):
         "station_id": station_id,
         "logs": logs,
         "count": len(logs),
+    }
+
+
+@app.get("/api/v1/history/{station_id}")
+async def get_station_history(station_id: str, limit_logs: int = 200, limit_snapshots: int = 200):
+    history = db_get_station_history(station_id, limit_logs=limit_logs, limit_snapshots=limit_snapshots)
+    return {
+        "station_id": station_id,
+        "logs": history.get("logs", []),
+        "energy_snapshots": history.get("energy_snapshots", []),
+    }
+
+
+@app.get("/api/v1/sessions")
+async def get_sessions(limit: int = 200, station_id: Optional[str] = None):
+    sessions = list_sessions(limit=limit, station_id=station_id)
+    return {
+        "count": len(sessions),
+        "sessions": sessions,
     }
 
 

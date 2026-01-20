@@ -25,6 +25,13 @@ from metrics import (
     record_meter_value,
 )
 from charging_policy import evaluate_charging_policy, evaluate_meter_value_decision
+from db import (
+    add_energy_snapshot,
+    log_station_message,
+    save_charging_profile,
+    start_session_history,
+    stop_session_history,
+)
 
 # OCPP 1.6 SmartCharging imports
 from charging_profile_manager import (
@@ -67,9 +74,11 @@ class SimulatedChargePoint(CP):
         Args:
             message: Description of the event/action
         """
+        timestamp_dt = datetime.now(timezone.utc)
         timestamp = datetime.now().strftime("%H:%M:%S")
         log_entry = f"[{timestamp}] {message}"
         self.log_buffer.append(log_entry)
+        log_station_message(self.id, message, timestamp=timestamp_dt)
 
     def get_logs(self) -> list:
         """
@@ -118,6 +127,10 @@ class SimulatedChargePoint(CP):
             SetChargingProfile.conf with status
         """
         try:
+            # Persist raw profile JSON on receipt
+            profile_id = cs_charging_profiles.get("chargingProfileId")
+            save_charging_profile(self.id, cs_charging_profiles, profile_id=profile_id)
+
             # Parse the charging profile from OCPP dict
             profile = parse_charging_profile(cs_charging_profiles)
             
@@ -325,6 +338,11 @@ class SimulatedChargePoint(CP):
                     f"Profile {profile.charging_profile_id} accepted "
                     f"(purpose={profile.charging_profile_purpose.value}, "
                     f"stackLevel={profile.stack_level})"
+                )
+                save_charging_profile(
+                    self.id,
+                    profile_dict,
+                    profile_id=profile.charging_profile_id,
                 )
                 return {
                     "status": "Accepted",
@@ -639,6 +657,11 @@ async def simulate_station(
                 logger.warning(
                     f"{station_id}: Missing transaction_id, using fake {transaction_id}"
                 )
+            start_session_history(
+                session_id=transaction_id,
+                station_id=station_id,
+                start_time=datetime.now(timezone.utc),
+            )
 
             self_energy = 0
             max_energy_wh = int(profile.max_energy_kwh * 1000)  # Convert kWh to Wh
@@ -755,6 +778,11 @@ async def simulate_station(
                 
                 # Record meter value update
                 record_meter_value()
+                add_energy_snapshot(
+                    station_id=station_id,
+                    energy_kwh=self_energy / 1000.0,
+                    timestamp=datetime.now(timezone.utc),
+                )
                 
                 # Exit early if energy cap reached
                 if self_energy >= max_energy_wh:
@@ -775,6 +803,12 @@ async def simulate_station(
             energy_kwh = self_energy / 1000.0
             cp.log(f"Charging stopped ({energy_kwh:.2f} kWh delivered)")
             record_energy_dispensed(energy_kwh)
+            stop_session_history(
+                session_id=transaction_id,
+                station_id=station_id,
+                stop_time=datetime.now(timezone.utc),
+                energy_kwh=energy_kwh,
+            )
 
     # -------------------- MAIN TASKS --------------------
 

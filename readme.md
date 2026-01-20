@@ -308,6 +308,14 @@ This separates **policy evaluation** (pure, testable) from **policy execution** 
 - `POST /pricing` – set price
 - `GET /totals` – total energy and earnings
 
+### Persistence (SQLite) and History APIs
+
+**Database location:** The SQLite database is created at simulator.db in the project root. You can override the path by setting SIMULATOR_DB_PATH.
+
+**New endpoints:**
+- `GET /api/v1/history/{station_id}` – recent logs + energy snapshots for a station
+- `GET /api/v1/sessions` – list past charging sessions (optional query: `station_id`, `limit`)
+
 
 
 ## Dashboard UI
