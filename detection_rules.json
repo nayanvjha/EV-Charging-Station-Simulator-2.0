@@ -1,0 +1,52 @@
+[
+  {
+    "name": "Authorize Flood",
+    "event_type": "AUTH_REQUEST",
+    "threshold": 5,
+    "window_seconds": 60,
+    "station_scope": true,
+    "severity": "warning",
+    "description": "Too many Authorize requests from same station",
+    "alert_event_type": "AUTH_FAILURE"
+  },
+  {
+    "name": "Suspicious Reboot Loop",
+    "event_type": "BOOT_NOTIFICATION",
+    "threshold": 3,
+    "window_seconds": 30,
+    "station_scope": true,
+    "severity": "warning",
+    "description": "Repeated BootNotification bursts",
+    "alert_event_type": "HEARTBEAT_FLOOD"
+  },
+  {
+    "name": "Energy Spam or Spoof",
+    "event_type": "METER_VALUES",
+    "threshold": 10,
+    "window_seconds": 30,
+    "station_scope": true,
+    "severity": "warning",
+    "description": "Excessive MeterValues messages detected",
+    "alert_event_type": "HEARTBEAT_FLOOD"
+  },
+  {
+    "name": "Station Spoof Attempt",
+    "event_type": "UNKNOWN_STATION",
+    "threshold": 1,
+    "window_seconds": 60,
+    "station_scope": false,
+    "severity": "critical",
+    "description": "Unknown ChargeBoxId attempting to connect",
+    "alert_event_type": "UNAUTHORIZED_COMMAND"
+  },
+  {
+    "name": "Malformed Payload",
+    "event_type": "MALFORMED_PAYLOAD",
+    "threshold": 1,
+    "window_seconds": 60,
+    "station_scope": true,
+    "severity": "critical",
+    "description": "Malformed or invalid payload received",
+    "alert_event_type": "MALFORMED_MESSAGE"
+  }
+]

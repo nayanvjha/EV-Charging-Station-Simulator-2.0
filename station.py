@@ -1,8 +1,10 @@
 import asyncio
 import logging
 import random
+import time
 from collections import deque
 from datetime import datetime, timezone
+from typing import Tuple
 
 import websockets
 from ocpp.routing import on
@@ -25,6 +27,10 @@ from metrics import (
     record_meter_value,
 )
 from charging_policy import evaluate_charging_policy, evaluate_meter_value_decision
+from fault_injector import fault_manager, FaultType
+from ev_model import BatteryModel
+from security_monitor import EventType, security_monitor
+from security_detection import flow_tracker, rule_evaluator
 from db import (
     add_energy_snapshot,
     log_station_message,
@@ -57,15 +63,164 @@ class SimulatedChargePoint(CP):
         super().__init__(id, connection)
         self.id = id
         self.current_transaction_id = None
+        self._last_transaction_id = None
+        self._heartbeat_flood_until = None
+        self._duplicate_tx_until = None
+        self._tamper_until = None
+        self._tamper_target = None
+        self._tamper_type = None
+        self._boot_times = deque(maxlen=10)
         # Initialize log buffer with max 50 entries
         self.log_buffer = deque(maxlen=50)
         
         # OCPP 1.6 SmartCharging: Initialize profile manager
         self.profile_manager = ChargingProfileManager()
+
+        # EV battery model (per-station)
+        self.battery = BatteryModel()
         
         # Log startup
         self.log("Station initialized")
         self.log("SmartCharging profile manager initialized")
+        self.log(
+            f"EV battery: {self.battery.capacity_kwh:.1f}kWh, "
+            f"SOC {self.battery.soc_kwh:.1f}kWh, max {self.battery.max_charge_power_kw:.1f}kW"
+        )
+
+    def update_battery_profile(
+        self,
+        capacity_kwh=None,
+        soc_kwh=None,
+        temperature_c=None,
+        max_charge_power_kw=None,
+        tapering_enabled=None,
+    ) -> None:
+        self.battery.update_profile(
+            capacity_kwh=capacity_kwh,
+            soc_kwh=soc_kwh,
+            temperature_c=temperature_c,
+            max_charge_power_kw=max_charge_power_kw,
+            tapering_enabled=tapering_enabled,
+        )
+        self.log(
+            f"Battery profile updated: {self.battery.capacity_kwh:.1f}kWh, "
+            f"SOC {self.battery.soc_kwh:.1f}kWh, "
+            f"temp {self.battery.temperature_c:.1f}C, "
+            f"max {self.battery.max_charge_power_kw:.1f}kW, "
+            f"tapering {self.battery.tapering_enabled}"
+        )
+
+    async def _apply_fault(self, message_type: str) -> Tuple[bool, bool]:
+        """
+        Apply any active fault for this station/message.
+
+        Returns:
+            (should_drop, should_corrupt)
+        """
+        fault = fault_manager.check_fault(self.id, message_type)
+        if not fault:
+            return False, False
+
+        if fault.fault_type == FaultType.TIMEOUT:
+            delay = fault.duration or 5
+            self.log(f"{message_type}: TIMEOUT {delay}s (Fault Injection)")
+            await asyncio.sleep(delay)
+            return False, False
+
+        if fault.fault_type == FaultType.DISCONNECT:
+            duration = fault.duration or 5
+            self.log(f"{message_type}: DISCONNECT for {duration}s (Fault Injection)")
+            try:
+                await self._connection.close()
+            except Exception:
+                pass
+            await asyncio.sleep(duration)
+            return True, False
+
+        if fault.fault_type == FaultType.DROP_MESSAGE:
+            self.log(f"{message_type}: DROP_MESSAGE (Fault Injection)")
+            return True, False
+
+        if fault.fault_type == FaultType.CORRUPT_PAYLOAD:
+            self.log(f"{message_type}: CORRUPT_PAYLOAD (Fault Injection)")
+            return False, True
+
+        return False, False
+
+    def _corrupt_request_payload(self, request, corruption_type: str = "truncate_field"):
+        for attr in ("id_tag", "meter_start", "meter_stop", "transaction_id"):
+            if hasattr(request, attr):
+                try:
+                    if corruption_type == "truncate_field":
+                        setattr(request, attr, "")
+                    else:
+                        setattr(request, attr, "CORRUPTED")
+                except Exception:
+                    pass
+                return request
+        return request
+
+    async def call(self, payload, suppress: bool = False):
+        message_type = payload.__class__.__name__
+        should_drop, should_corrupt = await self._apply_fault(message_type)
+        if should_drop:
+            return None
+        if self._is_tamper_active() and (self._tamper_target in (None, message_type)):
+            payload = self._corrupt_request_payload(payload, self._tamper_type or "truncate_field")
+        elif should_corrupt:
+            payload = self._corrupt_request_payload(payload)
+        return await super().call(payload, suppress=suppress)
+
+    def _attack_active(self, until) -> bool:
+        return until is not None and time.monotonic() <= until
+
+    def _is_heartbeat_flood_active(self) -> bool:
+        return self._attack_active(self._heartbeat_flood_until)
+
+    def _is_duplicate_tx_active(self) -> bool:
+        return self._attack_active(self._duplicate_tx_until)
+
+    def _is_tamper_active(self) -> bool:
+        return self._attack_active(self._tamper_until)
+
+    def enable_heartbeat_flood(self, duration: float = 30) -> None:
+        self._heartbeat_flood_until = time.monotonic() + (duration or 30)
+        self.log(f"Security: Heartbeat flood enabled for {duration}s")
+        security_monitor.log_event(
+            EventType.HEARTBEAT_FLOOD,
+            self.id,
+            f"Heartbeat flood enabled for {duration}s",
+            severity="medium",
+        )
+
+    def enable_duplicate_transactions(self, duration: float = 30) -> None:
+        self._duplicate_tx_until = time.monotonic() + (duration or 30)
+        self.log(f"Security: Duplicate transactions enabled for {duration}s")
+        security_monitor.log_event(
+            EventType.DUPLICATE_TRANSACTION,
+            self.id,
+            f"Duplicate transactions enabled for {duration}s",
+            severity="medium",
+        )
+
+    def enable_tamper_payload(
+        self,
+        target_message: str = None,
+        corruption_type: str = "truncate_field",
+        duration: float = 30,
+    ) -> None:
+        self._tamper_until = time.monotonic() + (duration or 30)
+        self._tamper_target = target_message
+        self._tamper_type = corruption_type
+        self.log(
+            f"Security: Tamper payload enabled for {duration}s (target={target_message}, type={corruption_type})"
+        )
+        security_monitor.log_event(
+            EventType.MALFORMED_MESSAGE,
+            self.id,
+            f"Payload tamper enabled (target={target_message}, type={corruption_type})",
+            severity="high",
+        )
 
     def log(self, message: str) -> None:
         """
@@ -93,11 +248,17 @@ class SimulatedChargePoint(CP):
 
     @on("Reset")
     async def on_reset(self, type, **kwargs):
+        should_drop, _ = await self._apply_fault("Reset")
+        if should_drop:
+            return None
         logger.info(f"{self.id}: Received Reset request: type={type}")
         return {"status": "Accepted"}
 
     @on("RemoteStartTransaction")
     async def on_remote_start_transaction(self, id_tag, connector_id, **kwargs):
+        should_drop, _ = await self._apply_fault("RemoteStartTransaction")
+        if should_drop:
+            return None
         logger.info(
             f"{self.id}: RemoteStartTransaction for tag {id_tag} on connector {connector_id}"
         )
@@ -105,7 +266,17 @@ class SimulatedChargePoint(CP):
 
     @on("RemoteStopTransaction")
     async def on_remote_stop_transaction(self, transaction_id, **kwargs):
+        should_drop, _ = await self._apply_fault("RemoteStopTransaction")
+        if should_drop:
+            return None
         logger.info(f"{self.id}: RemoteStopTransaction for tx {transaction_id}")
+        if self.current_transaction_id is not None and transaction_id != self.current_transaction_id:
+            security_monitor.log_event(
+                EventType.DUPLICATE_TRANSACTION,
+                self.id,
+                f"RemoteStopTransaction for unknown tx {transaction_id} (current {self.current_transaction_id})",
+                severity="medium",
+            )
         return {"status": "Accepted"}
 
     # -------------------- OCPP 1.6 SMARTCHARGING HANDLERS --------------------
@@ -127,6 +298,9 @@ class SimulatedChargePoint(CP):
             SetChargingProfile.conf with status
         """
         try:
+            should_drop, _ = await self._apply_fault("SetChargingProfile")
+            if should_drop:
+                return None
             # Persist raw profile JSON on receipt
             profile_id = cs_charging_profiles.get("chargingProfileId")
             save_charging_profile(self.id, cs_charging_profiles, profile_id=profile_id)
@@ -183,6 +357,9 @@ class SimulatedChargePoint(CP):
             GetCompositeSchedule.conf with schedule or Rejected status
         """
         try:
+            should_drop, _ = await self._apply_fault("GetCompositeSchedule")
+            if should_drop:
+                return None
             # Extract optional chargingRateUnit, default to "W"
             rate_unit_str = kwargs.get("charging_rate_unit", "W")
             try:
@@ -248,6 +425,9 @@ class SimulatedChargePoint(CP):
             ClearChargingProfile.conf with Accepted or Unknown status
         """
         try:
+            should_drop, _ = await self._apply_fault("ClearChargingProfile")
+            if should_drop:
+                return None
             # Extract optional filters from kwargs
             profile_id = kwargs.get("id")
             connector_id = kwargs.get("connector_id", 0)
@@ -542,6 +722,17 @@ async def simulate_station(
     # -------------------- BOOT --------------------
 
     async def send_boot_notification():
+        now = datetime.now(timezone.utc)
+        cp._boot_times.append(now)
+        recent_boots = [t for t in cp._boot_times if (now - t).total_seconds() <= 60]
+        if len(recent_boots) > 3:
+            security_monitor.log_event(
+                EventType.HEARTBEAT_FLOOD,
+                station_id,
+                "Repeated BootNotifications within 60s",
+                severity="medium",
+            )
+        flow_tracker.record_event("BOOT_NOTIFICATION", station_id)
         cp.log("BootNotification sent")
         req = call.BootNotification(
             charge_point_model="PythonSim-Model",
@@ -561,7 +752,10 @@ async def simulate_station(
 
     async def send_heartbeat_loop():
         while True:
-            await asyncio.sleep(profile.heartbeat_interval)
+            fault_manager.tick()
+            interval = 1 if cp._is_heartbeat_flood_active() else profile.heartbeat_interval
+            await asyncio.sleep(interval)
+            flow_tracker.record_event("HEARTBEAT", station_id)
             response = await cp.call(call.Heartbeat())
             logger.info(f"{station_id}: Heartbeat -> {response}")
             cp.log("Heartbeat sent")
@@ -574,6 +768,7 @@ async def simulate_station(
             return
 
         while True:
+            fault_manager.tick()
             # Idle before next session
             idle = random.randint(profile.idle_min, profile.idle_max)
             logger.info(f"{station_id}: Waiting {idle}s before new session")
@@ -625,6 +820,7 @@ async def simulate_station(
 
             # -------- Authorize --------
             auth_req = call.Authorize(id_tag=id_tag)
+            flow_tracker.record_event("AUTH_REQUEST", station_id)
             auth_res = await cp.call(auth_req)
             logger.info(f"{station_id}: Authorize({id_tag}) -> {auth_res}")
             auth_status = getattr(auth_res, "id_tag_info", {})
@@ -633,6 +829,12 @@ async def simulate_station(
                 cp.log(f"Authorization successful - {id_tag}")
             else:
                 cp.log(f"Authorization failed - {id_tag} ({auth_result})")
+                security_monitor.log_event(
+                    EventType.AUTH_FAILURE,
+                    station_id,
+                    f"Authorize rejected for id_tag {id_tag} ({auth_result})",
+                    severity="low",
+                )
 
             # -------- Start Transaction --------
             start_req = call.StartTransaction(
@@ -641,6 +843,7 @@ async def simulate_station(
                 meter_start=0,
                 timestamp=datetime.now(timezone.utc).isoformat(),
             )
+            flow_tracker.record_event("START_TRANSACTION", station_id)
             start_res = await cp.call(start_req)
             logger.info(
                 f"{station_id}: StartTransaction -> {start_res} "
@@ -657,6 +860,17 @@ async def simulate_station(
                 logger.warning(
                     f"{station_id}: Missing transaction_id, using fake {transaction_id}"
                 )
+            if cp._is_duplicate_tx_active() and cp._last_transaction_id is not None:
+                transaction_id = cp._last_transaction_id
+                cp.log(f"Security: Duplicate transaction ID used: {transaction_id}")
+                security_monitor.log_event(
+                    EventType.DUPLICATE_TRANSACTION,
+                    station_id,
+                    f"Duplicate transaction ID reused: {transaction_id}",
+                    severity="medium",
+                )
+            cp._last_transaction_id = transaction_id
+            cp.current_transaction_id = transaction_id
             start_session_history(
                 session_id=transaction_id,
                 station_id=station_id,
@@ -670,6 +884,7 @@ async def simulate_station(
             # Loop until energy limit is reached or random iterations completed
             max_iterations = random.randint(3, 8)
             for iteration in range(max_iterations):
+                fault_manager.tick()
                 sample_interval_seconds = random.randint(
                     profile.sample_interval_min,
                     profile.sample_interval_max,
@@ -683,11 +898,14 @@ async def simulate_station(
                     transaction_id=transaction_id
                 )
                 
-                # Calculate base energy step using existing random range
-                base_step = random.randint(
-                    profile.energy_step_min,
-                    profile.energy_step_max,
-                )
+                # EV-side battery model determines base energy acceptance
+                base_step_kwh = cp.battery.step_charge(sample_interval_seconds)
+                if cp.battery.last_reason:
+                    cp.log(cp.battery.last_reason)
+                if base_step_kwh <= 0:
+                    cp.log("Battery full — stopping session")
+                    break
+                base_step = base_step_kwh * 1000.0
                 
                 # Apply OCPP profile limits if active (takes absolute precedence)
                 if profile_limit_w is not None:
@@ -741,7 +959,7 @@ async def simulate_station(
                     
                     # Apply legacy smart charging adjustment during peak hours
                     if is_peak_hour(current_hour, profile.peak_hours) and profile.allow_peak:
-                        energy_step = max(int(base_step * 0.5), 10)
+                        energy_step = max(float(base_step * 0.5), 10.0)
                         logger.info(
                             f"{station_id}: Legacy policy peak reduction "
                             f"(step reduced from {base_step} to {energy_step} Wh)"
@@ -771,6 +989,7 @@ async def simulate_station(
                     ],
                 )
 
+                flow_tracker.record_event("METER_VALUES", station_id)
                 mv_res = await cp.call(mv_req)
                 logger.info(
                     f"{station_id}: MeterValues({self_energy/1000:.1f}kWh) -> {mv_res}"
@@ -796,6 +1015,7 @@ async def simulate_station(
                 timestamp=datetime.now(timezone.utc).isoformat(),
                 id_tag=id_tag,
             )
+            flow_tracker.record_event("STOP_TRANSACTION", station_id)
             stop_res = await cp.call(stop_req)
             logger.info(f"{station_id}: StopTransaction -> {stop_res}")
             
@@ -809,10 +1029,12 @@ async def simulate_station(
                 stop_time=datetime.now(timezone.utc),
                 energy_kwh=energy_kwh,
             )
+            cp.current_transaction_id = None
 
     # -------------------- MAIN TASKS --------------------
 
     try:
+        asyncio.create_task(rule_evaluator.run())
         recv_task = asyncio.create_task(cp.start())
         hb_task = asyncio.create_task(send_heartbeat_loop())
         tx_task = asyncio.create_task(auto_transaction_loop())

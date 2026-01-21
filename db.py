@@ -12,6 +12,8 @@ from sqlalchemy import (
     String,
     Text,
     create_engine,
+    delete,
+    func,
     select,
     update,
 )
@@ -74,6 +76,26 @@ class ChargingProfile(Base):
     profile_id = Column(Integer, nullable=True, index=True)
     profile_json = Column(Text, nullable=False)
     created_at = Column(DateTime(timezone=True), nullable=False)
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    email = Column(String(255), nullable=False, unique=True, index=True)
+    api_key = Column(String(128), nullable=False, unique=True, index=True)
+    created_at = Column(DateTime(timezone=True), nullable=False)
+
+
+class SecurityEventRecord(Base):
+    __tablename__ = "security_events"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    timestamp = Column(DateTime(timezone=True), nullable=False)
+    station_id = Column(String(64), nullable=False, index=True)
+    event_type = Column(String(64), nullable=False, index=True)
+    severity = Column(String(32), nullable=False, index=True)
+    description = Column(Text, nullable=False)
 
 
 def init_db() -> None:
@@ -239,6 +261,7 @@ def get_station_history(
 def list_sessions(
     limit: int = 200,
     station_id: Optional[str] = None,
+    station_ids: Optional[List[str]] = None,
 ) -> List[Dict[str, Any]]:
     _ensure_db()
     sessions: List[Dict[str, Any]] = []
@@ -247,6 +270,8 @@ def list_sessions(
             stmt = select(SessionHistory)
             if station_id:
                 stmt = stmt.where(SessionHistory.station_id == station_id)
+            elif station_ids:
+                stmt = stmt.where(SessionHistory.station_id.in_(station_ids))
             stmt = stmt.order_by(SessionHistory.start_time.desc()).limit(limit)
             sessions = [
                 {
@@ -261,3 +286,157 @@ def list_sessions(
     except Exception as exc:
         logger.exception("Failed to list sessions: %s", exc)
     return sessions
+
+
+def insert_security_event(event: Dict[str, Any]) -> None:
+    _ensure_db()
+    try:
+        with SessionLocal() as session:
+            session.add(
+                SecurityEventRecord(
+                    timestamp=event["timestamp"],
+                    station_id=event["station_id"],
+                    event_type=event["event_type"],
+                    severity=event["severity"],
+                    description=event["description"],
+                )
+            )
+            session.commit()
+    except Exception as exc:
+        logger.exception("Failed to insert SecurityEvent: %s", exc)
+
+
+def get_security_events_recent(limit: int = 100) -> List[Dict[str, Any]]:
+    _ensure_db()
+    try:
+        with SessionLocal() as session:
+            stmt = (
+                select(SecurityEventRecord)
+                .order_by(SecurityEventRecord.timestamp.desc())
+                .limit(limit)
+            )
+            rows = session.execute(stmt).scalars().all()
+            return [
+                {
+                    "timestamp": row.timestamp,
+                    "station_id": row.station_id,
+                    "event_type": row.event_type,
+                    "severity": row.severity,
+                    "description": row.description,
+                }
+                for row in rows
+            ]
+    except Exception as exc:
+        logger.exception("Failed to read SecurityEvent history: %s", exc)
+        return []
+
+
+def get_security_events_by_station(station_id: str, limit: int = 200) -> List[Dict[str, Any]]:
+    _ensure_db()
+    try:
+        with SessionLocal() as session:
+            stmt = (
+                select(SecurityEventRecord)
+                .where(SecurityEventRecord.station_id == station_id)
+                .order_by(SecurityEventRecord.timestamp.desc())
+                .limit(limit)
+            )
+            rows = session.execute(stmt).scalars().all()
+            return [
+                {
+                    "timestamp": row.timestamp,
+                    "station_id": row.station_id,
+                    "event_type": row.event_type,
+                    "severity": row.severity,
+                    "description": row.description,
+                }
+                for row in rows
+            ]
+    except Exception as exc:
+        logger.exception("Failed to read SecurityEvent for station: %s", exc)
+        return []
+
+
+def get_security_event_stats() -> Dict[str, Dict[str, int]]:
+    _ensure_db()
+    stats = {"by_type": {}, "by_severity": {}}
+    try:
+        with SessionLocal() as session:
+            type_stmt = (
+                select(SecurityEventRecord.event_type, func.count(SecurityEventRecord.id))
+                .group_by(SecurityEventRecord.event_type)
+            )
+            severity_stmt = (
+                select(SecurityEventRecord.severity, func.count(SecurityEventRecord.id))
+                .group_by(SecurityEventRecord.severity)
+            )
+            for event_type, count in session.execute(type_stmt).all():
+                stats["by_type"][event_type] = int(count)
+            for severity, count in session.execute(severity_stmt).all():
+                stats["by_severity"][severity] = int(count)
+    except Exception as exc:
+        logger.exception("Failed to read SecurityEvent stats: %s", exc)
+    return stats
+
+
+def clear_security_events() -> None:
+    _ensure_db()
+    try:
+        with SessionLocal() as session:
+            session.execute(delete(SecurityEventRecord))
+            session.commit()
+    except Exception as exc:
+        logger.exception("Failed to clear SecurityEvent table: %s", exc)
+
+
+def create_user(email: str, api_key: str) -> Dict[str, Any]:
+    _ensure_db()
+    with SessionLocal() as session:
+        user = User(email=email, api_key=api_key, created_at=datetime.now(timezone.utc))
+        session.add(user)
+        session.commit()
+        session.refresh(user)
+        return {
+            "id": user.id,
+            "email": user.email,
+            "api_key": user.api_key,
+            "created_at": user.created_at.isoformat(),
+        }
+
+
+def get_user_by_api_key(api_key: str) -> Optional[Dict[str, Any]]:
+    _ensure_db()
+    try:
+        with SessionLocal() as session:
+            stmt = select(User).where(User.api_key == api_key)
+            user = session.execute(stmt).scalars().first()
+            if not user:
+                return None
+            return {
+                "id": user.id,
+                "email": user.email,
+                "api_key": user.api_key,
+                "created_at": user.created_at.isoformat(),
+            }
+    except Exception as exc:
+        logger.exception("Failed to get user by api_key: %s", exc)
+        return None
+
+
+def get_user_by_email(email: str) -> Optional[Dict[str, Any]]:
+    _ensure_db()
+    try:
+        with SessionLocal() as session:
+            stmt = select(User).where(User.email == email)
+            user = session.execute(stmt).scalars().first()
+            if not user:
+                return None
+            return {
+                "id": user.id,
+                "email": user.email,
+                "api_key": user.api_key,
+                "created_at": user.created_at.isoformat(),
+            }
+    except Exception as exc:
+        logger.exception("Failed to get user by email: %s", exc)
+        return None

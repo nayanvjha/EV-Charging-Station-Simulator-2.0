@@ -1,9 +1,14 @@
 import asyncio
+import contextlib
+import os
 import random
+import secrets
+import time
 from contextlib import suppress
 from typing import Dict, List, Optional
 
-from fastapi import FastAPI, HTTPException, Request, Query
+from fastapi import FastAPI, HTTPException, Request, Query, Depends, Security
+from fastapi.security import APIKeyHeader
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, PlainTextResponse
 from fastapi.templating import Jinja2Templates
@@ -24,7 +29,21 @@ from csms_server import (
     create_time_of_use_profile,
     create_energy_cap_profile,
 )
-from db import init_db, get_station_history as db_get_station_history, list_sessions
+import websockets
+from ocpp.v16 import ChargePoint as CP
+from ocpp.v16 import call
+from db import (
+    init_db,
+    get_station_history as db_get_station_history,
+    list_sessions,
+    create_user,
+    get_user_by_api_key,
+    get_user_by_email,
+)
+from security_monitor import event_to_dict, security_monitor
+from security_monitor import EventType
+from fault_injector import FaultRule, FaultType, fault_manager
+from security_detection import flow_tracker, rule_evaluator
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("controller_api")
@@ -68,6 +87,30 @@ class StopRequest(BaseModel):
 
 class PriceUpdate(BaseModel):
     price: float
+
+
+class BatteryProfileRequest(BaseModel):
+    capacity_kwh: Optional[float] = None
+    soc_kwh: Optional[float] = None
+    temperature_c: Optional[float] = None
+    max_charge_power_kw: Optional[float] = None
+    tapering_enabled: Optional[bool] = None
+
+
+class UserCreateRequest(BaseModel):
+    email: str
+
+
+class SecurityAttackRequest(BaseModel):
+    station_id: str
+    action: str = Field(..., description="inject_fault | spoof_command | tamper_payload")
+    type: Optional[str] = None
+    duration: Optional[float] = None
+    message_type: Optional[str] = None
+    target_message: Optional[str] = None
+    corruption_type: Optional[str] = None
+    payload: Optional[dict] = None
+    allow_unowned: bool = False
 
 
 # ================== SMARTCHARGING MODELS ==================
@@ -151,10 +194,13 @@ class StationManager:
         self.station_usage: Dict[str, float] = {}
         self.station_energy_kwh: Dict[str, float] = {}
         self.station_chargepoints: Dict[str, object] = {}  # Store ChargePoint instances for log access
+        self.station_owners: Dict[str, int] = {}
 
-    def list_stations(self) -> List[StationInfo]:
+    def list_stations(self, user_id: int) -> List[StationInfo]:
         result = []
         for sid, task in self.tasks.items():
+            if self.station_owners.get(sid) != user_id:
+                continue
             profile_name = self.station_profiles.get(sid, "default")
             profile = self.profiles.get(profile_name)
             energy = self.station_energy_kwh.get(sid, 0.0)
@@ -176,8 +222,10 @@ class StationManager:
             )
         return result
 
-    async def start_station(self, station_id: str, profile_name: str):
+    async def start_station(self, user_id: int, station_id: str, profile_name: str):
         if station_id in self.tasks and not self.tasks[station_id].done():
+            if self.station_owners.get(station_id) != user_id:
+                raise ValueError("Station ID already owned by another user")
             return
 
         profile = self.profiles.get(profile_name)
@@ -212,11 +260,14 @@ class StationManager:
         self.station_profiles[station_id] = profile_name
         self.station_usage[station_id] = 0.0
         self.station_energy_kwh[station_id] = 0.0
+        self.station_owners[station_id] = user_id
 
-    async def stop_station(self, station_id: str):
+    async def stop_station(self, user_id: int, station_id: str):
         task = self.tasks.get(station_id)
         if not task:
             return
+        if self.station_owners.get(station_id) != user_id:
+            raise ValueError("Station not owned by user")
 
         task.cancel()
         with suppress(asyncio.CancelledError):
@@ -224,20 +275,22 @@ class StationManager:
 
         self.station_usage[station_id] = 0.0
 
-    async def scale_to(self, target_count: int, profile_name: str = "default"):
-        current_ids = sorted(self.tasks.keys())
+    async def scale_to(self, user_id: int, target_count: int, profile_name: str = "default"):
+        current_ids = sorted(
+            sid for sid, owner in self.station_owners.items() if owner == user_id
+        )
         current_count = len(current_ids)
 
         # Stop all existing stations first
         for sid in current_ids:
-            await self.stop_station(sid)
+            await self.stop_station(user_id, sid)
         
         # Create new stations with the specified profile
         for i in range(1, target_count + 1):
             sid = f"PY-SIM-{i:04d}"
-            await self.start_station(sid, profile_name)
+            await self.start_station(user_id, sid, profile_name)
 
-    def get_station_logs(self, station_id: str) -> List[str]:
+    def get_station_logs(self, user_id: int, station_id: str) -> List[str]:
         """
         Get recent log entries for a specific station.
         
@@ -247,10 +300,15 @@ class StationManager:
         Returns:
             List of recent log entries, empty list if station not found
         """
+        if self.station_owners.get(station_id) != user_id:
+            return []
         chargepoint = self.station_chargepoints.get(station_id)
         if not chargepoint:
             return []
         return chargepoint.get_logs()
+
+    def get_user_station_ids(self, user_id: int) -> List[str]:
+        return [sid for sid, owner in self.station_owners.items() if owner == user_id]
 
 # ================== APP ==================
 
@@ -267,6 +325,101 @@ app.add_middleware(
 
 templates = Jinja2Templates(directory="templates")
 manager = StationManager(CSMS_URL, DEFAULT_PROFILES)
+
+
+async def _send_spoofed_command(
+    station_id: str,
+    message_type: str,
+    payload: dict,
+) -> None:
+    ws = await websockets.connect(
+        f"{CSMS_URL}/{station_id}",
+        subprotocols=["ocpp1.6"],
+    )
+    cp = CP(station_id, ws)
+    recv_task = asyncio.create_task(cp.start())
+    try:
+        if message_type == "BootNotification":
+            req = call.BootNotification(
+                charge_point_model=payload.get("charge_point_model", "Spoofed-Model"),
+                charge_point_vendor=payload.get("charge_point_vendor", "Spoofed-Vendor"),
+            )
+        elif message_type == "Heartbeat":
+            req = call.Heartbeat()
+        elif message_type == "Authorize":
+            req = call.Authorize(id_tag=payload.get("id_tag", "SPOOF"))
+        elif message_type == "StartTransaction":
+            req = call.StartTransaction(
+                connector_id=payload.get("connector_id", 1),
+                id_tag=payload.get("id_tag", "SPOOF"),
+                meter_start=payload.get("meter_start", 0),
+                timestamp=payload.get("timestamp", time.strftime("%Y-%m-%dT%H:%M:%SZ")),
+            )
+        elif message_type == "MeterValues":
+            req = call.MeterValues(
+                connector_id=payload.get("connector_id", 1),
+                transaction_id=payload.get("transaction_id", 9999),
+                meter_value=payload.get("meter_value", []),
+            )
+        elif message_type == "StopTransaction":
+            req = call.StopTransaction(
+                transaction_id=payload.get("transaction_id", 9999),
+                meter_stop=payload.get("meter_stop", 0),
+                timestamp=payload.get("timestamp", time.strftime("%Y-%m-%dT%H:%M:%SZ")),
+                id_tag=payload.get("id_tag"),
+            )
+        else:
+            raise ValueError(f"Unsupported spoof_command type: {message_type}")
+        await cp.call(req)
+    except Exception as exc:
+        logger.warning("Spoofed command failed: %s", exc)
+    finally:
+        recv_task.cancel()
+        with contextlib.suppress(Exception):
+            await ws.close()
+
+
+async def _send_malformed_payload(station_id: str) -> None:
+    ws = await websockets.connect(
+        f"{CSMS_URL}/{station_id}",
+        subprotocols=["ocpp1.6"],
+    )
+    try:
+        await ws.send("{bad_json:")
+    except Exception as exc:
+        logger.warning("Malformed payload send failed: %s", exc)
+    finally:
+        await ws.close()
+
+# ================== AUTH ==================
+
+api_key_header = APIKeyHeader(name="x-api-key", auto_error=False)
+RATE_LIMIT_PER_HOUR = int(os.getenv("SIM_RATE_LIMIT_PER_HOUR", "5000"))
+_rate_limit_state: Dict[str, Dict[str, float]] = {}
+
+
+def _enforce_rate_limit(api_key: str) -> None:
+    if RATE_LIMIT_PER_HOUR <= 0:
+        return
+    now = time.time()
+    window = 3600
+    state = _rate_limit_state.get(api_key)
+    if not state or now - state["start"] > window:
+        _rate_limit_state[api_key] = {"start": now, "count": 1}
+        return
+    if state["count"] >= RATE_LIMIT_PER_HOUR:
+        raise HTTPException(status_code=429, detail="Rate limit exceeded")
+    state["count"] += 1
+
+
+def get_current_user(api_key: Optional[str] = Security(api_key_header)) -> Dict[str, str]:
+    if not api_key:
+        raise HTTPException(status_code=401, detail="Missing API key")
+    user = get_user_by_api_key(api_key)
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid API key")
+    _enforce_rate_limit(api_key)
+    return user
 
 # ================== ENERGY LOOP ==================
 
@@ -305,12 +458,12 @@ async def startup():
 # ================== APIs ==================
 
 @app.get("/stations", response_model=List[StationInfo])
-async def get_stations():
-    return manager.list_stations()
+async def get_stations(user=Depends(get_current_user)):
+    return manager.list_stations(user["id"])
 
 
 @app.get("/totals")
-async def get_totals():
+async def get_totals(user=Depends(get_current_user)):
     return {
         "total_energy_kwh": round(TOTAL_ENERGY_KWH, 3),
         "total_earnings": round(TOTAL_EARNINGS, 2),
@@ -325,12 +478,12 @@ async def get_metrics():
 
 
 @app.get("/pricing")
-async def get_price():
+async def get_price(user=Depends(get_current_user)):
     return {"price": CURRENT_PRICE_PER_KWH}
 
 
 @app.post("/pricing")
-async def set_price(req: PriceUpdate):
+async def set_price(req: PriceUpdate, user=Depends(get_current_user)):
     global CURRENT_PRICE_PER_KWH
     if req.price <= 0:
         raise HTTPException(400, "Invalid price")
@@ -339,27 +492,55 @@ async def set_price(req: PriceUpdate):
 
 
 @app.post("/stations/start")
-async def start_station(req: StartRequest):
-    await manager.start_station(req.station_id, req.profile)
-    return {"status": "ok"}
+async def start_station(req: StartRequest, user=Depends(get_current_user)):
+    try:
+        await manager.start_station(user["id"], req.station_id, req.profile)
+        return {"status": "ok"}
+    except ValueError as e:
+        raise HTTPException(status_code=403, detail=str(e))
 
 
 @app.post("/stations/stop")
-async def stop_station(req: StopRequest):
-    await manager.stop_station(req.station_id)
-    return {"status": "ok"}
+async def stop_station(req: StopRequest, user=Depends(get_current_user)):
+    try:
+        await manager.stop_station(user["id"], req.station_id)
+        return {"status": "ok"}
+    except ValueError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+
+
+@app.post("/stations/{station_id}/battery_profile")
+async def set_battery_profile(station_id: str, req: BatteryProfileRequest, user=Depends(get_current_user)):
+    chargepoint = manager.station_chargepoints.get(station_id)
+    if not chargepoint or manager.station_owners.get(station_id) != user["id"]:
+        raise HTTPException(status_code=404, detail=f"Station {station_id} not found or not connected")
+    try:
+        chargepoint.update_battery_profile(
+            capacity_kwh=req.capacity_kwh,
+            soc_kwh=req.soc_kwh,
+            temperature_c=req.temperature_c,
+            max_charge_power_kw=req.max_charge_power_kw,
+            tapering_enabled=req.tapering_enabled,
+        )
+        return {"status": "ok"}
+    except Exception as e:
+        logger.error(f"Battery profile update error for {station_id}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to update battery profile")
 
 
 @app.post("/stations/scale")
-async def scale(req: ScaleRequest):
-    await manager.scale_to(req.count, req.profile)
-    return {"status": "ok"}
+async def scale(req: ScaleRequest, user=Depends(get_current_user)):
+    try:
+        await manager.scale_to(user["id"], req.count, req.profile)
+        return {"status": "ok"}
+    except ValueError as e:
+        raise HTTPException(status_code=403, detail=str(e))
 
 
 @app.get("/stations/{station_id}/logs")
-async def get_station_logs(station_id: str):
+async def get_station_logs(station_id: str, user=Depends(get_current_user)):
     """Get recent log entries for a specific station."""
-    logs = manager.get_station_logs(station_id)
+    logs = manager.get_station_logs(user["id"], station_id)
     return {
         "station_id": station_id,
         "logs": logs,
@@ -368,7 +549,14 @@ async def get_station_logs(station_id: str):
 
 
 @app.get("/api/v1/history/{station_id}")
-async def get_station_history(station_id: str, limit_logs: int = 200, limit_snapshots: int = 200):
+async def get_station_history(
+    station_id: str,
+    limit_logs: int = 200,
+    limit_snapshots: int = 200,
+    user=Depends(get_current_user),
+):
+    if station_id not in manager.get_user_station_ids(user["id"]):
+        raise HTTPException(status_code=404, detail="Station not found")
     history = db_get_station_history(station_id, limit_logs=limit_logs, limit_snapshots=limit_snapshots)
     return {
         "station_id": station_id,
@@ -378,18 +566,160 @@ async def get_station_history(station_id: str, limit_logs: int = 200, limit_snap
 
 
 @app.get("/api/v1/sessions")
-async def get_sessions(limit: int = 200, station_id: Optional[str] = None):
-    sessions = list_sessions(limit=limit, station_id=station_id)
+async def get_sessions(limit: int = 200, station_id: Optional[str] = None, user=Depends(get_current_user)):
+    if station_id and station_id not in manager.get_user_station_ids(user["id"]):
+        raise HTTPException(status_code=404, detail="Station not found")
+    station_ids = None if station_id else manager.get_user_station_ids(user["id"])
+    sessions = list_sessions(limit=limit, station_id=station_id, station_ids=station_ids)
     return {
         "count": len(sessions),
         "sessions": sessions,
     }
 
 
+@app.get("/api/v1/security/events")
+async def get_security_events(limit: int = 100, user=Depends(get_current_user)):
+    station_ids = set(manager.get_user_station_ids(user["id"]))
+    events = [
+        event_to_dict(event)
+        for event in security_monitor.get_recent_events(limit=limit)
+        if not station_ids or event.station_id in station_ids
+    ]
+    return {
+        "count": len(events),
+        "events": events,
+    }
+
+
+@app.get("/api/v1/security/stations/{station_id}/events")
+async def get_security_events_for_station(station_id: str, user=Depends(get_current_user)):
+    station_ids = set(manager.get_user_station_ids(user["id"]))
+    if station_ids and station_id not in station_ids:
+        raise HTTPException(status_code=404, detail="Station not found")
+    events = [event_to_dict(event) for event in security_monitor.get_events_for_station(station_id)]
+    return {
+        "station_id": station_id,
+        "count": len(events),
+        "events": events,
+    }
+
+
+@app.get("/api/v1/security/stats")
+async def get_security_stats(user=Depends(get_current_user)):
+    station_ids = set(manager.get_user_station_ids(user["id"]))
+    stats = {"by_type": {}, "by_severity": {}}
+    for event in security_monitor.get_recent_events(limit=1000):
+        if station_ids and event.station_id not in station_ids:
+            continue
+        stats["by_type"][event.event_type.value] = stats["by_type"].get(event.event_type.value, 0) + 1
+        stats["by_severity"][event.severity] = stats["by_severity"].get(event.severity, 0) + 1
+    return stats
+
+
+@app.delete("/api/v1/security/clear")
+async def clear_security_events(user=Depends(get_current_user)):
+    security_monitor.clear_events()
+    return {"status": "cleared"}
+
+
+@app.get("/api/v1/security/flows")
+async def get_security_flows(window_seconds: int = 60, user=Depends(get_current_user)):
+    station_ids = set(manager.get_user_station_ids(user["id"]))
+    snapshot = flow_tracker.get_counts_snapshot(window_seconds=window_seconds)
+    filtered = {
+        "global": snapshot.get("global", {}),
+        "by_station": {
+            station_id: counts
+            for station_id, counts in snapshot.get("by_station", {}).items()
+            if station_id in station_ids
+        },
+        "window_seconds": window_seconds,
+    }
+    return filtered
+
+
+@app.post("/api/v1/security/rules/reload")
+async def reload_security_rules(user=Depends(get_current_user)):
+    rule_evaluator.reload_rules()
+    return {"status": "reloaded"}
+
+
+@app.post("/api/v1/security/attack")
+async def trigger_security_attack(req: SecurityAttackRequest, user=Depends(get_current_user)):
+    station_ids = set(manager.get_user_station_ids(user["id"]))
+    if req.station_id not in station_ids and not req.allow_unowned:
+        raise HTTPException(status_code=404, detail="Station not found")
+
+    action = req.action
+    if action == "inject_fault":
+        if not req.type:
+            raise HTTPException(status_code=400, detail="inject_fault requires type")
+        if req.type == "HEARTBEAT_FLOOD":
+            chargepoint = manager.station_chargepoints.get(req.station_id)
+            if not chargepoint:
+                raise HTTPException(status_code=404, detail="Station not connected")
+            chargepoint.enable_heartbeat_flood(duration=req.duration)
+            return {"status": "ok", "message": "Heartbeat flood enabled"}
+        if req.type == "DUPLICATE_TRANSACTIONS":
+            chargepoint = manager.station_chargepoints.get(req.station_id)
+            if not chargepoint:
+                raise HTTPException(status_code=404, detail="Station not connected")
+            chargepoint.enable_duplicate_transactions(duration=req.duration)
+            return {"status": "ok", "message": "Duplicate transactions enabled"}
+
+        fault_type = FaultType(req.type)
+        fault_manager.add_fault_rule(
+            FaultRule(
+                fault_type=fault_type,
+                station_id=req.station_id,
+                trigger_time=0,
+                duration=req.duration,
+                message_type=req.message_type,
+            )
+        )
+        return {"status": "ok", "message": f"Fault injected: {fault_type.value}"}
+
+    if action == "spoof_command":
+        if not req.type:
+            raise HTTPException(status_code=400, detail="spoof_command requires type")
+        await _send_spoofed_command(
+            station_id=req.station_id,
+            message_type=req.type,
+            payload=req.payload or {},
+        )
+        security_monitor.log_event(
+            EventType.UNAUTHORIZED_COMMAND,
+            req.station_id,
+            f"Manual spoofed command sent: {req.type}",
+            severity="high",
+        )
+        return {"status": "ok", "message": "Spoofed command sent"}
+
+    if action == "tamper_payload":
+        chargepoint = manager.station_chargepoints.get(req.station_id)
+        if chargepoint:
+            chargepoint.enable_tamper_payload(
+                target_message=req.target_message,
+                corruption_type=req.corruption_type or "truncate_field",
+                duration=req.duration,
+            )
+        else:
+            await _send_malformed_payload(req.station_id)
+        security_monitor.log_event(
+            EventType.MALFORMED_MESSAGE,
+            req.station_id,
+            "Manual payload tamper triggered",
+            severity="high",
+        )
+        return {"status": "ok", "message": "Payload tamper triggered"}
+
+    raise HTTPException(status_code=400, detail=f"Unsupported action: {action}")
+
+
 # ================== SMARTCHARGING APIs ==================
 
 @app.post("/stations/{station_id}/charging_profile", response_model=ChargingProfileResponse)
-async def send_charging_profile(station_id: str, req: ChargingProfileRequest):
+async def send_charging_profile(station_id: str, req: ChargingProfileRequest, user=Depends(get_current_user)):
     """
     Send a charging profile to a specific station.
     
@@ -404,7 +734,7 @@ async def send_charging_profile(station_id: str, req: ChargingProfileRequest):
     
     # Check if station exists
     chargepoint = manager.station_chargepoints.get(station_id)
-    if not chargepoint:
+    if not chargepoint or manager.station_owners.get(station_id) != user["id"]:
         logger.error(f"Station {station_id} not found")
         raise HTTPException(status_code=404, detail=f"Station {station_id} not found or not connected")
     
@@ -453,7 +783,8 @@ async def get_composite_schedule(
     station_id: str,
     connector_id: int = Query(..., description="Connector ID"),
     duration: int = Query(..., description="Duration in seconds"),
-    charging_rate_unit: str = Query(default="W", description="W or A")
+    charging_rate_unit: str = Query(default="W", description="W or A"),
+    user=Depends(get_current_user),
 ):
     """
     Request composite schedule from a station.
@@ -471,7 +802,7 @@ async def get_composite_schedule(
     
     # Check if station exists
     chargepoint = manager.station_chargepoints.get(station_id)
-    if not chargepoint:
+    if not chargepoint or manager.station_owners.get(station_id) != user["id"]:
         logger.error(f"Station {station_id} not found")
         raise HTTPException(status_code=404, detail=f"Station {station_id} not found or not connected")
     
@@ -519,7 +850,8 @@ async def clear_charging_profile(
     profile_id: Optional[int] = Query(None, description="Profile ID to clear"),
     connector_id: Optional[int] = Query(None, description="Connector ID"),
     purpose: Optional[str] = Query(None, description="Profile purpose"),
-    stack_level: Optional[int] = Query(None, description="Stack level")
+    stack_level: Optional[int] = Query(None, description="Stack level"),
+    user=Depends(get_current_user),
 ):
     """
     Clear charging profiles from a station.
@@ -538,7 +870,7 @@ async def clear_charging_profile(
     
     # Check if station exists
     chargepoint = manager.station_chargepoints.get(station_id)
-    if not chargepoint:
+    if not chargepoint or manager.station_owners.get(station_id) != user["id"]:
         logger.error(f"Station {station_id} not found")
         raise HTTPException(status_code=404, detail=f"Station {station_id} not found or not connected")
     
@@ -584,7 +916,7 @@ async def clear_charging_profile(
 
 
 @app.post("/stations/{station_id}/test_profiles", response_model=TestProfileResponse)
-async def send_test_profile(station_id: str, req: TestProfileRequest):
+async def send_test_profile(station_id: str, req: TestProfileRequest, user=Depends(get_current_user)):
     """
     Generate and send a test charging profile based on a scenario.
     
@@ -604,7 +936,7 @@ async def send_test_profile(station_id: str, req: TestProfileRequest):
     
     # Check if station exists
     chargepoint = manager.station_chargepoints.get(station_id)
-    if not chargepoint:
+    if not chargepoint or manager.station_owners.get(station_id) != user["id"]:
         logger.error(f"Station {station_id} not found")
         raise HTTPException(status_code=404, detail=f"Station {station_id} not found or not connected")
     
@@ -685,6 +1017,17 @@ async def send_test_profile(station_id: str, req: TestProfileRequest):
             message="Failed to generate or send test profile",
             error=str(e)
         )
+
+
+@app.post("/admin/users")
+async def create_user_admin(req: UserCreateRequest, user=Depends(get_current_user)):
+    init_db()
+    existing = get_user_by_email(req.email)
+    if existing:
+        return {"email": existing["email"], "api_key": existing["api_key"]}
+    api_key = secrets.token_urlsafe(32)
+    user = create_user(req.email, api_key)
+    return {"email": user["email"], "api_key": user["api_key"]}
 
 
 @app.get("/", response_class=HTMLResponse)

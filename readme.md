@@ -12,6 +12,20 @@ The project includes:
 
 For a consolidated, end-to-end guide covering setup, architecture, API, UI, logging, the policy engine, and tests, see the complete documentation: [COMPLETE_DOCUMENTATION.md](COMPLETE_DOCUMENTATION.md)
 
+## API Key (Required for Dashboard/API)
+
+Generate an API key using the admin CLI, then paste it into the dashboard’s **API Access** panel:
+
+```bash
+./.venv/bin/python user_admin.py create --email you@example.com
+```
+
+It will print:
+
+```
+User: you@example.com -> API Key: <YOUR_KEY>
+```
+
 
 ## Features
 
@@ -76,6 +90,13 @@ Example: An "idle" profile with `charge_if_price_below=18` won't start charging 
 - Prometheus metrics on port 9100
   - `GET http://localhost:9100/metrics`
 
+### Security Monitoring & SOC
+- Built‑in **Security Monitor** with alerts for spoofing, malformed payloads, floods, and suspicious behavior
+- **SOC panel** in the dashboard with live alerts, filters, charts, and station drill‑down
+- **Manual Attack Trigger** endpoint for testing alert pipeline
+- **Detection rules** (IDS‑style) from `detection_rules.json`
+- **Flow tracking** with windowed counts per station
+
 
 
 ## Installation
@@ -119,6 +140,10 @@ CSMS listening on ws://0.0.0.0:9000/ocpp/<station_id>
 uvicorn controller_api:app --reload --port 8000
 ```
 Open: **http://localhost:8000/**
+
+### Step 2.1: Add your API key in the dashboard
+- Open the UI
+- Paste your key in **API Access** and click **Save**
 
 ### Step 3: Use the dashboard
 - Set station count
@@ -298,6 +323,13 @@ This separates **policy evaluation** (pure, testable) from **policy execution** 
 
 ## REST API Endpoints
 
+**Authentication:** Protected endpoints require `x-api-key`. Basic rate limit: 100 requests/hour per key.
+
+Example:
+```bash
+curl -H "x-api-key: <YOUR_KEY>" http://localhost:8000/stations
+```
+
 - `GET /stations` – list stations
 - `GET /stations/{station_id}/logs` – get activity logs for a station
 - `POST /stations/scale` – scale swarm size
@@ -308,6 +340,100 @@ This separates **policy evaluation** (pure, testable) from **policy execution** 
 - `POST /pricing` – set price
 - `GET /totals` – total energy and earnings
 
+### Security Operations (SOC) APIs
+
+Security alerts are available via the SOC endpoints (protected by `x-api-key`).
+
+- `GET /api/v1/security/events?limit=100` – recent alerts
+- `GET /api/v1/security/stations/{station_id}/events` – alerts for one station
+- `GET /api/v1/security/stats` – counts by type/severity
+- `GET /api/v1/security/flows?window_seconds=60` – flow counts by station (IDS telemetry)
+- `POST /api/v1/security/rules/reload` – reload `detection_rules.json`
+- `DELETE /api/v1/security/clear` – clear alerts (dev use)
+
+**Manual attack trigger (testing only):**
+
+- `POST /api/v1/security/attack`
+
+Example payloads:
+
+```json
+{
+    "station_id": "PY-SIM-0001",
+    "action": "inject_fault",
+    "type": "HEARTBEAT_FLOOD",
+    "duration": 30
+}
+```
+
+```json
+{
+    "station_id": "PY-SIM-0001",
+    "action": "spoof_command",
+    "type": "BootNotification",
+    "payload": {
+        "charge_point_model": "Spoofed-Model",
+        "charge_point_vendor": "Spoofed-Vendor"
+    }
+}
+```
+
+```json
+{
+    "station_id": "PY-SIM-0001",
+    "action": "tamper_payload",
+    "target_message": "StartTransaction",
+    "corruption_type": "truncate_field",
+    "duration": 20
+}
+```
+
+### Security Operations (SOC) APIs
+
+Security alerts are available via the SOC endpoints (protected by `x-api-key`).
+
+- `GET /api/v1/security/events?limit=100` – recent alerts
+- `GET /api/v1/security/stations/{station_id}/events` – alerts for one station
+- `GET /api/v1/security/stats` – counts by type/severity
+- `DELETE /api/v1/security/clear` – clear alerts (dev use)
+
+**Manual attack trigger (testing only):**
+
+- `POST /api/v1/security/attack`
+
+Example payloads:
+
+```json
+{
+    "station_id": "PY-SIM-0001",
+    "action": "inject_fault",
+    "type": "HEARTBEAT_FLOOD",
+    "duration": 30
+}
+```
+
+```json
+{
+    "station_id": "PY-SIM-0001",
+    "action": "spoof_command",
+    "type": "BootNotification",
+    "payload": {
+        "charge_point_model": "Spoofed-Model",
+        "charge_point_vendor": "Spoofed-Vendor"
+    }
+}
+```
+
+```json
+{
+    "station_id": "PY-SIM-0001",
+    "action": "tamper_payload",
+    "target_message": "StartTransaction",
+    "corruption_type": "truncate_field",
+    "duration": 20
+}
+```
+
 ### Persistence (SQLite) and History APIs
 
 **Database location:** The SQLite database is created at simulator.db in the project root. You can override the path by setting SIMULATOR_DB_PATH.
@@ -315,6 +441,61 @@ This separates **policy evaluation** (pure, testable) from **policy execution** 
 **New endpoints:**
 - `GET /api/v1/history/{station_id}` – recent logs + energy snapshots for a station
 - `GET /api/v1/sessions` – list past charging sessions (optional query: `station_id`, `limit`)
+
+### EV Battery Model (Per-Station)
+
+Each station includes an EV-side battery model with SOC tapering and temperature derating. You can update a station’s battery parameters at runtime:
+
+- `POST /stations/{station_id}/battery_profile`
+
+Example payload:
+```json
+{
+    "capacity_kwh": 60.0,
+    "soc_kwh": 12.5,
+    "temperature_c": 25.0,
+    "max_charge_power_kw": 11.0,
+    "tapering_enabled": true
+}
+```
+
+The effective charging power is limited by the EV battery model, OCPP profile limits, and local policy.
+
+### Scenario Engine (YAML/JSON)
+
+Run scripted timelines with the scenario engine:
+
+```bash
+python scenario_engine.py run scenarios/demo.yaml
+```
+
+Example scenario snippet:
+```yaml
+- time: 0
+    action: start_stations
+    count: 10
+- time: 60
+    action: set_price
+    value: 18
+- time: 120
+    action: inject_fault
+    station_id: PY-SIM-0001
+    type: DISCONNECT
+    duration: 60
+ - time: 180
+     action: spoof_command
+     station_id: PY-SIM-9999
+     type: BootNotification
+     payload:
+       charge_point_model: Spoofed-Model
+       charge_point_vendor: Spoofed-Vendor
+ - time: 210
+     action: tamper_payload
+     station_id: PY-SIM-0001
+     target_message: StartTransaction
+     corruption_type: truncate_field
+     duration: 20
+```
 
 
 
@@ -383,6 +564,12 @@ Each station has a collapsible **"📋 Logs"** button in the Actions column:
 
 The log viewer displays **up to 50 recent entries** per station, showing all critical OCPP events and smart charging decisions in real-time.
 
+### **SOC Panel (Security Operations Center)**
+- Open via **🛡️ Security** button in the header
+- Severity + station filters, live polling toggle
+- Charts: alerts by type, severity donut, last‑24h sparkline
+- **Generate Test Alert** button to verify the pipeline instantly
+
 ### **Real-time Updates**
 - All stats and table refresh every **5 seconds**
 - Energy and usage values update as stations charge
@@ -406,6 +593,15 @@ The log viewer displays **up to 50 recent entries** per station, showing all cri
 - Error simulation & protocol violations  
 - WebSocket live logs per station
 - Advanced analytics and reporting
+
+## Security Configuration
+
+You can configure security features via environment variables:
+
+- `SECURITY_PERSISTENCE=true` – persist alerts to SQLite
+- `SECURITY_RULES_ENABLED=true|false` – toggle detection rules
+- `SECURITY_RULES_PATH=./detection_rules.json` – custom rules file path
+- `SIM_RATE_LIMIT_PER_HOUR=5000` – adjust API rate limit per key
 
 
 

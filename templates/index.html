@@ -94,6 +94,12 @@
           </h1>
           <p>Python OCPP 1.6J · Controller Dashboard</p>
         </div>
+        <div class="header-actions">
+          <button class="btn-ghost security-btn" onclick="openSecurityPanel()">
+            🛡️ Security
+            <span class="security-badge" id="security-badge">0</span>
+          </button>
+        </div>
       </header>
 
       <!-- STATS -->
@@ -126,6 +132,21 @@
       <!-- CONTROLS -->
       <div class="controls-grid">
 
+        <!-- API KEY -->
+        <div class="control-card">
+          <div class="stat-label">🔐 API Access</div>
+          <div class="stat-sub">Enter your API key to access the simulator</div>
+          <div class="field">
+            <label>API Key</label>
+            <input type="password" id="api-key-input" placeholder="x-api-key">
+          </div>
+          <div class="button-row">
+            <button class="btn-primary" onclick="saveApiKey()">Save</button>
+            <button class="btn-ghost" onclick="clearApiKey()">Clear</button>
+          </div>
+          <div class="api-key-status" id="api-key-status">Not set</div>
+        </div>
+
         <!-- SMARTCHARGING PROFILE MANAGEMENT -->
         <div class="control-card smartcharging-panel">
           <div class="stat-label">⚡ SmartCharging Profiles</div>
@@ -153,6 +174,53 @@
           <div class="button-row">
             <button class="btn-ghost" onclick="viewProfiles()">📋 View Profiles</button>
             <button class="btn-danger" onclick="clearAllProfiles()">🗑️ Clear All</button>
+          </div>
+        </div>
+
+        <!-- BATTERY PROFILE -->
+        <div class="control-card">
+          <div class="stat-label">🔋 Battery Profile</div>
+          <div class="stat-sub">Update EV battery model per station</div>
+
+          <div class="field">
+            <label>Target Station</label>
+            <select id="battery-station-select">
+              <option value="">Select a station...</option>
+            </select>
+          </div>
+
+          <div class="field-row">
+            <div class="field">
+              <label>Capacity (kWh)</label>
+              <input type="number" id="battery-capacity" placeholder="60">
+            </div>
+            <div class="field">
+              <label>Start SOC (kWh)</label>
+              <input type="number" id="battery-soc" placeholder="10">
+            </div>
+          </div>
+
+          <div class="field-row">
+            <div class="field">
+              <label>Max Power (kW)</label>
+              <input type="number" id="battery-max-kw" placeholder="11">
+            </div>
+            <div class="field">
+              <label>Temp (°C)</label>
+              <input type="number" id="battery-temp" placeholder="25">
+            </div>
+          </div>
+
+          <div class="field-row checkbox-row">
+            <label class="checkbox-label">
+              <input type="checkbox" id="battery-taper" checked>
+              Tapering enabled
+            </label>
+          </div>
+
+          <div class="button-row">
+            <button class="btn-primary" onclick="applyBatteryProfile()">Apply</button>
+            <button class="btn-ghost" onclick="resetBatteryForm()">Reset</button>
           </div>
         </div>
 
@@ -245,11 +313,85 @@
               <th>Energy (kWh)</th>
               <th>OCPP Status</th>
               <th>Smart Charging</th>
+              <th>⚠️ Alerts</th>
               <th>Actions</th>
             </tr>
           </thead>
           <tbody id="stations-body"></tbody>
         </table>
+      </div>
+
+      <!-- SECURITY SOC PANEL -->
+      <div class="modal-overlay hidden" id="security-modal-overlay">
+        <div class="modal-content security-modal">
+          <div class="modal-header">
+            <h3>🛡️ Security Operations Center</h3>
+            <div class="security-header-actions">
+              <button class="btn-primary" onclick="generateTestAlert()">Generate Test Alert</button>
+              <button class="btn-ghost" onclick="refreshSecurity()">🔄 Refresh</button>
+              <button class="btn-danger" onclick="acknowledgeSecurity()">Acknowledge All</button>
+              <button class="btn-close" onclick="closeSecurityPanel()">✕</button>
+            </div>
+          </div>
+          <div class="modal-body">
+            <div class="security-filters">
+              <div class="field">
+                <label>Severity</label>
+                <select id="security-severity-filter">
+                  <option value="all">All</option>
+                  <option value="info">Info</option>
+                  <option value="warning">Warning</option>
+                  <option value="critical">Critical</option>
+                </select>
+              </div>
+              <div class="field">
+                <label>Station</label>
+                <select id="security-station-filter">
+                  <option value="">All stations</option>
+                </select>
+              </div>
+              <div class="field toggle-field">
+                <label>Live polling</label>
+                <label class="switch">
+                  <input type="checkbox" id="security-live-toggle" checked>
+                  <span class="slider"></span>
+                </label>
+              </div>
+            </div>
+
+            <div class="security-summary">
+              <div class="summary-card">
+                <h4>Alerts by Type</h4>
+                <div id="security-type-chart" class="bar-chart"></div>
+              </div>
+              <div class="summary-card">
+                <h4>Alerts by Severity</h4>
+                <div id="security-severity-chart" class="donut-chart"></div>
+                <div id="security-severity-legend" class="chart-legend"></div>
+              </div>
+              <div class="summary-card">
+                <h4>Alerts (last 24h)</h4>
+                <svg id="security-trend" viewBox="0 0 200 60" preserveAspectRatio="none"></svg>
+                <div class="trend-label" id="security-trend-label">No data</div>
+              </div>
+            </div>
+
+            <div class="security-table-wrapper">
+              <table class="security-table">
+                <thead>
+                  <tr>
+                    <th>Time</th>
+                    <th>Station ID</th>
+                    <th>Event Type</th>
+                    <th>Severity</th>
+                    <th>Description</th>
+                  </tr>
+                </thead>
+                <tbody id="security-events-body"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- PROFILE VIEWER MODAL -->

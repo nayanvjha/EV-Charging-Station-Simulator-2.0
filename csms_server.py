@@ -1,15 +1,29 @@
 import asyncio
 import logging
 from datetime import datetime, timezone
+from collections import deque
 
 import websockets
 from ocpp.routing import on
 from ocpp.v16 import ChargePoint as CP
 from ocpp.v16 import call, call_result
 from ocpp.v16.enums import RegistrationStatus
+from security_monitor import EventType, security_monitor
+from security_detection import flow_tracker, rule_evaluator
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("csms")
+
+_connection_attempts_by_station = {}
+_connection_attempts_by_ip = {}
+
+
+def _record_connection_attempt(key: str, attempts_map: dict, window_seconds: int = 60) -> int:
+    now = datetime.now(timezone.utc)
+    attempts = attempts_map.setdefault(key, deque(maxlen=50))
+    attempts.append(now)
+    recent = [t for t in attempts if (now - t).total_seconds() <= window_seconds]
+    return len(recent)
 
 
 # ============================================================================
@@ -140,9 +154,39 @@ def create_energy_cap_profile(
 
 
 class CentralSystemChargePoint(CP):
+    def __init__(self, id, connection):
+        super().__init__(id, connection)
+        self._boot_times = deque(maxlen=10)
+        self._heartbeat_times = deque(maxlen=50)
+        self._authorize_times = deque(maxlen=50)
+        self._meter_times = deque(maxlen=200)
+        self._active_transactions = set()
+
+    def _check_flood(self, events: deque, limit: int, window_seconds: int, label: str) -> None:
+        now = datetime.now(timezone.utc)
+        recent = [t for t in events if (now - t).total_seconds() <= window_seconds]
+        if len(recent) > limit:
+            security_monitor.log_event(
+                EventType.HEARTBEAT_FLOOD,
+                self.id,
+                f"{label} flood detected ({len(recent)} events in {window_seconds}s)",
+                severity="medium",
+            )
+
     @on("BootNotification")
     async def on_boot_notification(self, charge_point_model, charge_point_vendor, **kwargs):
         logger.info(f"{self.id}: BootNotification model={charge_point_model}, vendor={charge_point_vendor}")
+        flow_tracker.record_event("BOOT_NOTIFICATION", self.id)
+        now = datetime.now(timezone.utc)
+        self._boot_times.append(now)
+        recent_boots = [t for t in self._boot_times if (now - t).total_seconds() <= 60]
+        if len(recent_boots) > 3:
+            security_monitor.log_event(
+                EventType.HEARTBEAT_FLOOD,
+                self.id,
+                "Repeated BootNotifications within 60s",
+                severity="medium",
+            )
         # Return a dataclass instance, NOT a dict
         return call_result.BootNotification(
             current_time=datetime.now(timezone.utc).isoformat(),
@@ -153,6 +197,9 @@ class CentralSystemChargePoint(CP):
     @on("Heartbeat")
     async def on_heartbeat(self, **kwargs):
         logger.info(f"{self.id}: Heartbeat")
+        flow_tracker.record_event("HEARTBEAT", self.id)
+        self._heartbeat_times.append(datetime.now(timezone.utc))
+        self._check_flood(self._heartbeat_times, limit=20, window_seconds=60, label="Heartbeat")
         return call_result.Heartbeat(
             current_time=datetime.now(timezone.utc).isoformat()
         )
@@ -169,6 +216,9 @@ class CentralSystemChargePoint(CP):
     @on("Authorize")
     async def on_authorize(self, id_tag, **kwargs):
         logger.info(f"{self.id}: Authorize id_tag={id_tag}")
+        flow_tracker.record_event("AUTH_REQUEST", self.id)
+        self._authorize_times.append(datetime.now(timezone.utc))
+        self._check_flood(self._authorize_times, limit=15, window_seconds=60, label="Authorize")
         return call_result.Authorize(
             id_tag_info={"status": "Accepted"}
         )
@@ -178,8 +228,18 @@ class CentralSystemChargePoint(CP):
         logger.info(
             f"{self.id}: StartTransaction id_tag={id_tag}, connector={connector_id}, meter_start={meter_start}"
         )
+        flow_tracker.record_event("START_TRANSACTION", self.id)
+        transaction_id = 1234
+        if transaction_id in self._active_transactions:
+            security_monitor.log_event(
+                EventType.DUPLICATE_TRANSACTION,
+                self.id,
+                f"Duplicate StartTransaction for tx {transaction_id}",
+                severity="medium",
+            )
+        self._active_transactions.add(transaction_id)
         return call_result.StartTransaction(
-            transaction_id=1234,
+            transaction_id=transaction_id,
             id_tag_info={"status": "Accepted"},
         )
 
@@ -188,6 +248,16 @@ class CentralSystemChargePoint(CP):
         logger.info(
             f"{self.id}: MeterValues connector={connector_id}, tx={transaction_id}, values={meter_value}"
         )
+        flow_tracker.record_event("METER_VALUES", self.id)
+        self._meter_times.append(datetime.now(timezone.utc))
+        self._check_flood(self._meter_times, limit=30, window_seconds=60, label="MeterValues")
+        if self._active_transactions and transaction_id not in self._active_transactions:
+            security_monitor.log_event(
+                EventType.DUPLICATE_TRANSACTION,
+                self.id,
+                f"MeterValues for unknown tx {transaction_id}",
+                severity="medium",
+            )
         return call_result.MeterValues()
 
     @on("StopTransaction")
@@ -195,6 +265,15 @@ class CentralSystemChargePoint(CP):
         logger.info(
             f"{self.id}: StopTransaction tx={transaction_id}, meter_stop={meter_stop}, id_tag={id_tag}"
         )
+        flow_tracker.record_event("STOP_TRANSACTION", self.id)
+        if self._active_transactions and transaction_id not in self._active_transactions:
+            security_monitor.log_event(
+                EventType.DUPLICATE_TRANSACTION,
+                self.id,
+                f"StopTransaction for unknown tx {transaction_id}",
+                severity="medium",
+            )
+        self._active_transactions.discard(transaction_id)
         return call_result.StopTransaction(
             id_tag_info={"status": "Accepted"},
         )
@@ -427,6 +506,32 @@ async def on_connect(connection):
 
     parts = path.rstrip("/").split("/")
     station_id = parts[-1] if parts and parts[-1] else "UNKNOWN"
+    if not station_id.startswith("PY-SIM-"):
+        flow_tracker.record_event("UNKNOWN_STATION", station_id)
+    remote_ip = None
+    try:
+        remote_ip = connection.remote_address[0] if connection.remote_address else None
+    except Exception:
+        remote_ip = None
+
+    station_attempts = _record_connection_attempt(station_id, _connection_attempts_by_station)
+    if station_attempts > 5:
+        security_monitor.log_event(
+            EventType.UNAUTHORIZED_COMMAND,
+            station_id,
+            f"Too many reconnect attempts for station {station_id} in 60s ({station_attempts})",
+            severity="medium",
+        )
+
+    if remote_ip:
+        ip_attempts = _record_connection_attempt(remote_ip, _connection_attempts_by_ip)
+        if ip_attempts > 10:
+            security_monitor.log_event(
+                EventType.UNAUTHORIZED_COMMAND,
+                station_id,
+                f"Too many reconnect attempts from IP {remote_ip} in 60s ({ip_attempts})",
+                severity="high",
+            )
 
     logger.info(f"New connection from station: {station_id}, path={path}")
 
@@ -434,10 +539,19 @@ async def on_connect(connection):
     try:
         await cp.start()
     except Exception as e:
+        if "json" in str(e).lower():
+            flow_tracker.record_event("MALFORMED_PAYLOAD", station_id)
+            security_monitor.log_event(
+                EventType.MALFORMED_MESSAGE,
+                station_id,
+                f"Payload parsing error: {e}",
+                severity="high",
+            )
         logger.exception(f"Error in connection handler for {station_id}: {e}")
 
 
 async def main():
+    asyncio.create_task(rule_evaluator.run())
     server = await websockets.serve(
         on_connect,
         "0.0.0.0",
