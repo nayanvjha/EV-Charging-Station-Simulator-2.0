@@ -96,7 +96,7 @@
         </div>
         <div class="header-actions">
           <button class="btn-ghost security-btn" onclick="openSecurityPanel()">
-            🛡️ Security
+            Security
             <span class="security-badge" id="security-badge">0</span>
           </button>
         </div>
@@ -313,7 +313,7 @@
               <th>Energy (kWh)</th>
               <th>OCPP Status</th>
               <th>Smart Charging</th>
-              <th>⚠️ Alerts</th>
+              <th>Alerts</th>
               <th>Actions</th>
             </tr>
           </thead>
@@ -325,10 +325,10 @@
       <div class="modal-overlay hidden" id="security-modal-overlay">
         <div class="modal-content security-modal">
           <div class="modal-header">
-            <h3>🛡️ Security Operations Center</h3>
+            <h3>Security Operations Center</h3>
             <div class="security-header-actions">
-              <button class="btn-primary" onclick="generateTestAlert()">Generate Test Alert</button>
-              <button class="btn-ghost" onclick="refreshSecurity()">🔄 Refresh</button>
+              <button class="btn-primary" onclick="generateTestAlert()">Check Alerts</button>
+              <button class="btn-ghost" onclick="refreshSecurity()">Refresh</button>
               <button class="btn-danger" onclick="acknowledgeSecurity()">Acknowledge All</button>
               <button class="btn-close" onclick="closeSecurityPanel()">✕</button>
             </div>

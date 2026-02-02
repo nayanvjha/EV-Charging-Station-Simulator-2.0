@@ -253,6 +253,11 @@ class StationManager:
                 # fallback to dummy loop instead of blocking
                 while True:
                     await asyncio.sleep(1)
+            except Exception as exc:
+                logger.warning("Station %s failed to connect/start: %s", station_id, exc)
+                # fallback to dummy loop instead of dying
+                while True:
+                    await asyncio.sleep(1)
 
         task = asyncio.create_task(safe_sim())
 
@@ -270,10 +275,18 @@ class StationManager:
             raise ValueError("Station not owned by user")
 
         task.cancel()
-        with suppress(asyncio.CancelledError):
-            await task
-
-        self.station_usage[station_id] = 0.0
+        try:
+            with suppress(asyncio.CancelledError):
+                await task
+        except Exception as exc:
+            logger.warning("Stop station %s raised: %s", station_id, exc)
+        finally:
+            self.station_usage[station_id] = 0.0
+            self.tasks.pop(station_id, None)
+            self.station_profiles.pop(station_id, None)
+            self.station_energy_kwh.pop(station_id, None)
+            self.station_chargepoints.pop(station_id, None)
+            self.station_owners.pop(station_id, None)
 
     async def scale_to(self, user_id: int, target_count: int, profile_name: str = "default"):
         current_ids = sorted(
@@ -283,7 +296,10 @@ class StationManager:
 
         # Stop all existing stations first
         for sid in current_ids:
-            await self.stop_station(user_id, sid)
+            try:
+                await self.stop_station(user_id, sid)
+            except Exception as exc:
+                logger.warning("Scale stop failed for %s: %s", sid, exc)
         
         # Create new stations with the specified profile
         for i in range(1, target_count + 1):
@@ -535,6 +551,9 @@ async def scale(req: ScaleRequest, user=Depends(get_current_user)):
         return {"status": "ok"}
     except ValueError as e:
         raise HTTPException(status_code=403, detail=str(e))
+    except Exception as e:
+        logger.exception("Scale failed: %s", e)
+        raise HTTPException(status_code=500, detail="Failed to scale stations")
 
 
 @app.get("/stations/{station_id}/logs")

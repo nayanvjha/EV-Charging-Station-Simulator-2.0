@@ -185,7 +185,7 @@ async function fetchStations() {
           ? "alert-warning"
           : "alert-clear";
       const alertButton = `<button class="btn-ghost alert-btn" onclick="openSecurityPanel('${s.station_id}')">
-          ⚠️ <span class="alert-badge ${alertBadgeClass}">${alertSummary.total}</span>
+          <span class="alert-badge ${alertBadgeClass}">${alertSummary.total}</span>
         </button>`;
 
       tbody.innerHTML += `
