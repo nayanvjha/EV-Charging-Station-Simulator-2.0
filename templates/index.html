@@ -1,10 +1,14 @@
 <!doctype html>
 <html lang="en">
+
 <head>
   <meta charset="utf-8" />
   <title>EV Station Simulator</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="stylesheet" href="/static/styles.css">
+
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
 </head>
 
 <body>
@@ -17,59 +21,122 @@
           <stop offset="50%" style="stop-color:#2196F3;stop-opacity:0.15" />
           <stop offset="100%" style="stop-color:#4caf50;stop-opacity:0.3" />
         </linearGradient>
-        
+
         <filter id="glow">
-          <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+          <feGaussianBlur stdDeviation="3" result="coloredBlur" />
           <feMerge>
-            <feMergeNode in="coloredBlur"/>
-            <feMergeNode in="SourceGraphic"/>
+            <feMergeNode in="coloredBlur" />
+            <feMergeNode in="SourceGraphic" />
           </feMerge>
         </filter>
-        
+
         <style>
-          @keyframes pulse-glow { 0%, 100% { opacity: 0.3; } 50% { opacity: 0.6; } }
-          @keyframes float-up { 0% { transform: translateY(0) translateX(0); opacity: 0; } 50% { opacity: 0.4; } 100% { transform: translateY(-100px) translateX(20px); opacity: 0; } }
-          @keyframes rotate-slow { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-          @keyframes wave-motion { 0% { transform: translateX(0); } 50% { transform: translateX(10px); } 100% { transform: translateX(0); } }
-          .pulse-element { animation: pulse-glow 3s ease-in-out infinite; }
-          .float-element { animation: float-up 4s ease-in infinite; }
-          .rotate-element { animation: rotate-slow 20s linear infinite; }
-          .wave-element { animation: wave-motion 3s ease-in-out infinite; }
+          @keyframes pulse-glow {
+
+            0%,
+            100% {
+              opacity: 0.3;
+            }
+
+            50% {
+              opacity: 0.6;
+            }
+          }
+
+          @keyframes float-up {
+            0% {
+              transform: translateY(0) translateX(0);
+              opacity: 0;
+            }
+
+            50% {
+              opacity: 0.4;
+            }
+
+            100% {
+              transform: translateY(-100px) translateX(20px);
+              opacity: 0;
+            }
+          }
+
+          @keyframes rotate-slow {
+            0% {
+              transform: rotate(0deg);
+            }
+
+            100% {
+              transform: rotate(360deg);
+            }
+          }
+
+          @keyframes wave-motion {
+            0% {
+              transform: translateX(0);
+            }
+
+            50% {
+              transform: translateX(10px);
+            }
+
+            100% {
+              transform: translateX(0);
+            }
+          }
+
+          .pulse-element {
+            animation: pulse-glow 3s ease-in-out infinite;
+          }
+
+          .float-element {
+            animation: float-up 4s ease-in infinite;
+          }
+
+          .rotate-element {
+            animation: rotate-slow 20s linear infinite;
+          }
+
+          .wave-element {
+            animation: wave-motion 3s ease-in-out infinite;
+          }
         </style>
       </defs>
-      
-      <rect width="1200" height="800" fill="#050816" opacity="0.95"/>
-      
-      <circle cx="150" cy="150" r="80" fill="url(#energyGradient)" class="pulse-element" filter="url(#glow)"/>
-      <circle cx="1050" cy="650" r="100" fill="url(#energyGradient)" class="pulse-element" style="animation-delay: 1s;" filter="url(#glow)"/>
-      <circle cx="600" cy="400" r="60" fill="url(#energyGradient)" class="pulse-element" style="animation-delay: 0.5s;" filter="url(#glow)"/>
-      
+
+      <rect width="1200" height="800" fill="#050816" opacity="0.95" />
+
+      <circle cx="150" cy="150" r="80" fill="url(#energyGradient)" class="pulse-element" filter="url(#glow)" />
+      <circle cx="1050" cy="650" r="100" fill="url(#energyGradient)" class="pulse-element" style="animation-delay: 1s;"
+        filter="url(#glow)" />
+      <circle cx="600" cy="400" r="60" fill="url(#energyGradient)" class="pulse-element" style="animation-delay: 0.5s;"
+        filter="url(#glow)" />
+
       <g class="float-element" style="animation-delay: 0s;">
-        <circle cx="200" cy="700" r="5" fill="#4caf50" opacity="0.6"/>
+        <circle cx="200" cy="700" r="5" fill="#4caf50" opacity="0.6" />
       </g>
       <g class="float-element" style="animation-delay: 1s;">
-        <circle cx="400" cy="600" r="4" fill="#2196F3" opacity="0.5"/>
+        <circle cx="400" cy="600" r="4" fill="#2196F3" opacity="0.5" />
       </g>
       <g class="float-element" style="animation-delay: 2s;">
-        <circle cx="800" cy="300" r="5" fill="#4caf50" opacity="0.6"/>
+        <circle cx="800" cy="300" r="5" fill="#4caf50" opacity="0.6" />
       </g>
       <g class="float-element" style="animation-delay: 1.5s;">
-        <circle cx="100" cy="400" r="4" fill="#2196F3" opacity="0.5"/>
+        <circle cx="100" cy="400" r="4" fill="#2196F3" opacity="0.5" />
       </g>
-      
+
       <g transform="translate(600, 400)" class="rotate-element">
-        <circle cx="0" cy="0" r="50" fill="none" stroke="#4caf50" stroke-width="2" opacity="0.3"/>
-        <circle cx="0" cy="0" r="35" fill="none" stroke="#2196F3" stroke-width="1.5" opacity="0.2"/>
-        <path d="M0,-15 L8,-5 L2,5 L10,25 L-5,8 L-8,18 Z" fill="#4caf50" opacity="0.4" filter="url(#glow)"/>
+        <circle cx="0" cy="0" r="50" fill="none" stroke="#4caf50" stroke-width="2" opacity="0.3" />
+        <circle cx="0" cy="0" r="35" fill="none" stroke="#2196F3" stroke-width="1.5" opacity="0.2" />
+        <path d="M0,-15 L8,-5 L2,5 L10,25 L-5,8 L-8,18 Z" fill="#4caf50" opacity="0.4" filter="url(#glow)" />
       </g>
-      
+
       <g stroke="#4caf50" stroke-width="2" fill="none" opacity="0.2">
-        <path d="M 0 200 Q 300 150 600 200 T 1200 200" class="wave-element"/>
-        <path d="M 0 600 Q 300 550 600 600 T 1200 600" class="wave-element" style="animation-delay: 0.5s;"/>
+        <path d="M 0 200 Q 300 150 600 200 T 1200 200" class="wave-element" />
+        <path d="M 0 600 Q 300 550 600 600 T 1200 600" class="wave-element" style="animation-delay: 0.5s;" />
       </g>
-      
-      <circle cx="50" cy="50" r="30" fill="none" stroke="#2196F3" stroke-width="1" opacity="0.2" class="pulse-element" style="animation-delay: 2s;"/>
-      <circle cx="1150" cy="750" r="40" fill="none" stroke="#4caf50" stroke-width="1" opacity="0.2" class="pulse-element" style="animation-delay: 1.5s;"/>
+
+      <circle cx="50" cy="50" r="30" fill="none" stroke="#2196F3" stroke-width="1" opacity="0.2" class="pulse-element"
+        style="animation-delay: 2s;" />
+      <circle cx="1150" cy="750" r="40" fill="none" stroke="#4caf50" stroke-width="1" opacity="0.2"
+        class="pulse-element" style="animation-delay: 1.5s;" />
     </svg>
   </div>
 
@@ -102,224 +169,338 @@
         </div>
       </header>
 
-      <!-- STATS -->
-      <div class="stats-row">
-        <div class="stat-card">
-          <div class="stat-label">Total Stations</div>
-          <div class="stat-value" id="stat-total">0</div>
-        </div>
+      <!-- MAIN NAVIGATION TABS -->
+      <nav class="main-tabs">
+        <button class="tab-btn active" onclick="switchTab('dashboard')">Dashboard</button>
+        <button class="tab-btn" onclick="switchTab('simulations')">Simulations</button>
+        <button class="tab-btn" onclick="switchTab('stations')">Stations</button>
+        <button class="tab-btn" onclick="switchTab('map')">Map</button>
+        <button class="tab-btn" onclick="switchTab('analytics')">Analytics</button>
+        <button class="tab-btn" onclick="switchTab('settings')">Settings</button>
+      </nav>
 
-        <div class="stat-card">
-          <div class="stat-label">Running</div>
-          <div class="stat-value" id="stat-running">0</div>
-        </div>
-
-        <div class="stat-card">
-          <div class="stat-label">Total Energy</div>
-          <div class="stat-value">
-            <span id="total-energy">0.000</span> kWh
-          </div>
-        </div>
-
-        <div class="stat-card">
-          <div class="stat-label">Total Earnings</div>
-          <div class="stat-value">
-            ₹<span id="total-earnings">0.00</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- CONTROLS -->
-      <div class="controls-grid">
-
-        <!-- API KEY -->
-        <div class="control-card">
-          <div class="stat-label">🔐 API Access</div>
-          <div class="stat-sub">Enter your API key to access the simulator</div>
-          <div class="field">
-            <label>API Key</label>
-            <input type="password" id="api-key-input" placeholder="x-api-key">
-          </div>
-          <div class="button-row">
-            <button class="btn-primary" onclick="saveApiKey()">Save</button>
-            <button class="btn-ghost" onclick="clearApiKey()">Clear</button>
-          </div>
-          <div class="api-key-status" id="api-key-status">Not set</div>
-        </div>
-
-        <!-- SMARTCHARGING PROFILE MANAGEMENT -->
-        <div class="control-card smartcharging-panel">
-          <div class="stat-label">⚡ SmartCharging Profiles</div>
-          <div class="stat-sub">Send test profiles to active stations</div>
-          
-          <div class="field">
-            <label>Target Station</label>
-            <select id="sc-station-select">
-              <option value="">Select a station...</option>
-            </select>
-          </div>
-          
-          <div class="button-row">
-            <button class="btn-sc-limit" onclick="sendTestProfile('peak_shaving', 7400)" title="Limit to 7.4kW">
-               7.4kW
-            </button>
-            <button class="btn-sc-tou" onclick="sendTestProfile('time_of_use')" title="Time-of-Use (18:00-22:00)">
-               TOU
-            </button>
-            <button class="btn-sc-cap" onclick="sendTestProfile('energy_cap', 30000)" title="Energy Cap 30kWh">
-               30kWh
-            </button>
-          </div>
-          
-          <div class="button-row">
-            <button class="btn-ghost" onclick="viewProfiles()">📋 View Profiles</button>
-            <button class="btn-danger" onclick="clearAllProfiles()">🗑️ Clear All</button>
-          </div>
-        </div>
-
-        <!-- BATTERY PROFILE -->
-        <div class="control-card">
-          <div class="stat-label">🔋 Battery Profile</div>
-          <div class="stat-sub">Update EV battery model per station</div>
-
-          <div class="field">
-            <label>Target Station</label>
-            <select id="battery-station-select">
-              <option value="">Select a station...</option>
-            </select>
+      <div id="tab-dashboard" class="tab-content active">
+        <!-- STATS -->
+        <div class="stats-row">
+          <div class="stat-card">
+            <div class="stat-label">Total Stations</div>
+            <div class="stat-value" id="stat-total">0</div>
           </div>
 
-          <div class="field-row">
-            <div class="field">
-              <label>Capacity (kWh)</label>
-              <input type="number" id="battery-capacity" placeholder="60">
-            </div>
-            <div class="field">
-              <label>Start SOC (kWh)</label>
-              <input type="number" id="battery-soc" placeholder="10">
+          <div class="stat-card">
+            <div class="stat-label">Running</div>
+            <div class="stat-value" id="stat-running">0</div>
+          </div>
+
+          <div class="stat-card">
+            <div class="stat-label">Total Energy</div>
+            <div class="stat-value">
+              <span id="total-energy">0.000</span> kWh
             </div>
           </div>
 
-          <div class="field-row">
-            <div class="field">
-              <label>Max Power (kW)</label>
-              <input type="number" id="battery-max-kw" placeholder="11">
+          <div class="stat-card">
+            <div class="stat-label">Total Earnings</div>
+            <div class="stat-value">
+              ₹<span id="total-earnings">0.00</span>
             </div>
-            <div class="field">
-              <label>Temp (°C)</label>
-              <input type="number" id="battery-temp" placeholder="25">
-            </div>
-          </div>
-
-          <div class="field-row checkbox-row">
-            <label class="checkbox-label">
-              <input type="checkbox" id="battery-taper" checked>
-              Tapering enabled
-            </label>
-          </div>
-
-          <div class="button-row">
-            <button class="btn-primary" onclick="applyBatteryProfile()">Apply</button>
-            <button class="btn-ghost" onclick="resetBatteryForm()">Reset</button>
           </div>
         </div>
+      </div> <!-- END TAB-DASHBOARD -->
 
-        <!-- SCALE -->
-        <div class="control-card">
-          <div class="field-row">
-            <div class="field">
-              <label>Target count</label>
-              <input type="number" id="scale-count" value="5" min="0">
+      <div id="tab-map" class="tab-content hidden">
+        <!-- CONTROLS -->
+        <div class="controls-grid" style="grid-template-columns: 1fr;">
+
+          <!-- INTERACTIVE MAP PANEL -->
+          <div class="control-card map-panel">
+            <div class="stat-label" style="display:flex; justify-content:space-between; align-items:center;">
+              <span>🗺️ Live Network Map</span>
+              <div class="map-filters">
+                <label class="checkbox-label"><input type="checkbox" id="filter-online" checked
+                    onchange="applyMapFilters()"> Online</label>
+                <label class="checkbox-label"><input type="checkbox" id="filter-offline" checked
+                    onchange="applyMapFilters()"> Offline</label>
+              </div>
             </div>
+            <div class="stat-sub map-live-summary">
+              Active:
+              <strong id="map-online-count">0 Online</strong>
+              |
+              <strong id="map-offline-count">0 Offline</strong>
+            </div>
+            <div id="station-map" style="height: 600px; width: 100%; border-radius: 8px; margin-top: 10px; z-index: 1;">
+            </div>
+          </div>
+        </div>
+      </div> <!-- END TAB MAP -->
+
+      <div id="tab-settings" class="tab-content hidden">
+        <div class="controls-grid">
+          <!-- API KEY -->
+          <div class="control-card">
+            <div class="stat-label">🔐 API Access</div>
+            <div class="stat-sub">Enter your API key to access the simulator</div>
             <div class="field">
-              <label>Profile</label>
-              <select id="scale-profile">
-                <option value="default">default</option>
-                <option value="busy">busy</option>
-                <option value="idle">idle</option>
-                <option value="no-transactions">no-transactions</option>
-                <option value="flaky">flaky</option>
+              <label>API Key</label>
+              <input type="password" id="api-key-input" placeholder="x-api-key">
+            </div>
+            <div class="button-row">
+              <button class="btn-primary" onclick="saveApiKey()">Save</button>
+              <button class="btn-ghost" onclick="clearApiKey()">Clear</button>
+            </div>
+            <div class="api-key-status" id="api-key-status">Not set</div>
+          </div>
+        </div>
+      </div> <!-- END TAB SETTINGS -->
+
+      <div id="tab-simulations" class="tab-content hidden">
+        <div class="controls-grid">
+          <!-- SMARTCHARGING PROFILE MANAGEMENT -->
+          <div class="control-card smartcharging-panel">
+            <div class="stat-label">⚡ SmartCharging Profiles</div>
+            <div class="stat-sub">Send test profiles to active stations</div>
+
+            <div class="field">
+              <label>Target Station</label>
+              <select id="sc-station-select">
+                <option value="">Select a station...</option>
               </select>
             </div>
-          </div>
-          <div class="button-row">
-            <button class="btn-primary" onclick="scaleStations()">Apply scaling</button>
-          </div>
-        </div>
 
-        <!-- SINGLE -->
-        <div class="control-card">
-          <div class="field-row">
-            <div class="field">
-              <label>Station ID</label>
-              <input type="text" id="single-id" placeholder="PY-SIM-0001">
+            <div class="button-row">
+              <button class="btn-sc-limit" onclick="sendTestProfile('peak_shaving', 7400)" title="Limit to 7.4kW">
+                7.4kW
+              </button>
+              <button class="btn-sc-tou" onclick="sendTestProfile('time_of_use')" title="Time-of-Use (18:00-22:00)">
+                TOU
+              </button>
+              <button class="btn-sc-cap" onclick="sendTestProfile('energy_cap', 30000)" title="Energy Cap 30kWh">
+                30kWh
+              </button>
             </div>
+
+            <div class="button-row">
+              <button class="btn-ghost" onclick="viewProfiles()">📋 View Profiles</button>
+              <button class="btn-danger" onclick="clearAllProfiles()">🗑️ Clear All</button>
+            </div>
+          </div>
+
+          <!-- BATTERY PROFILE -->
+          <div class="control-card">
+            <div class="stat-label">🔋 Battery Profile</div>
+            <div class="stat-sub">Update EV battery model per station</div>
+
             <div class="field">
-              <label>Profile</label>
-              <select id="single-profile">
-                <option value="default">default</option>
-                <option value="busy">busy</option>
-                <option value="idle">idle</option>
-                <option value="no-transactions">no-transactions</option>
-                <option value="flaky">flaky</option>
+              <label>Target Station</label>
+              <select id="battery-station-select">
+                <option value="">Select a station...</option>
               </select>
             </div>
+
+            <div class="field-row">
+              <div class="field">
+                <label>Capacity (kWh)</label>
+                <input type="number" id="battery-capacity" placeholder="60">
+              </div>
+              <div class="field">
+                <label>Start SOC (kWh)</label>
+                <input type="number" id="battery-soc" placeholder="10">
+              </div>
+            </div>
+
+            <div class="field-row">
+              <div class="field">
+                <label>Max Power (kW)</label>
+                <input type="number" id="battery-max-kw" placeholder="11">
+              </div>
+              <div class="field">
+                <label>Temp (°C)</label>
+                <input type="number" id="battery-temp" placeholder="25">
+              </div>
+            </div>
+
+            <div class="field-row checkbox-row">
+              <label class="checkbox-label">
+                <input type="checkbox" id="battery-taper" checked>
+                Tapering enabled
+              </label>
+            </div>
+
+            <div class="button-row">
+              <button class="btn-primary" onclick="applyBatteryProfile()">Apply</button>
+              <button class="btn-ghost" onclick="resetBatteryForm()">Reset</button>
+            </div>
           </div>
-          <div class="button-row">
-            <button class="btn-primary" onclick="startSingle()">Start</button>
-            <button class="btn-danger" onclick="stopSingle()">Stop</button>
+
+          <!-- SCALE -->
+          <div class="control-card">
+            <div class="field-row">
+              <div class="field">
+                <label>Target count</label>
+                <input type="number" id="scale-count" value="5" min="0">
+              </div>
+              <div class="field">
+                <label>Profile</label>
+                <select id="scale-profile">
+                  <option value="default">default</option>
+                  <option value="busy">busy</option>
+                  <option value="idle">idle</option>
+                  <option value="no-transactions">no-transactions</option>
+                  <option value="flaky">flaky</option>
+                </select>
+              </div>
+            </div>
+            <div class="button-row">
+              <button class="btn-primary" onclick="scaleStations()">Apply scaling</button>
+            </div>
+          </div>
+
+          <!-- REPLAY (CSV) -->
+          <div class="control-card">
+            <div class="stat-label">📼 Replay from CSV</div>
+            <div class="stat-sub">Run deterministic replay using your CSV dataset</div>
+
+            <ol class="step-list">
+              <li>Scale stations to match CSV station_ids</li>
+              <li>Ensure CSMS is running on port 9000</li>
+              <li>Set CSV directory or files below</li>
+              <li>Click Run replay</li>
+            </ol>
+
+            <div class="field">
+              <label>CSV directory</label>
+              <input type="text" id="replay-csv-dir" placeholder="/path/to/csvs">
+            </div>
+
+            <div class="field">
+              <label>CSV files (optional, comma-separated)</label>
+              <input type="text" id="replay-csv-files" placeholder="file1.csv,file2.csv">
+            </div>
+
+            <div class="field-row">
+              <div class="field">
+                <label>Voltage (V)</label>
+                <input type="number" id="replay-voltage" value="230">
+              </div>
+              <div class="field">
+                <label>Timezone</label>
+                <input type="text" id="replay-timezone" value="UTC">
+              </div>
+            </div>
+
+            <div class="field-row">
+              <div class="field">
+                <label>Duration tolerance (s)</label>
+                <input type="number" id="replay-duration-tolerance" value="1" step="0.1">
+              </div>
+              <div class="field">
+                <label>Energy tolerance (kWh)</label>
+                <input type="number" id="replay-energy-tolerance" value="0.1" step="0.01">
+              </div>
+            </div>
+
+            <div class="field">
+              <label>Replay mode</label>
+              <select id="replay-mode">
+                <option value="STRICT">STRICT</option>
+                <option value="REAL_CSV">REAL_CSV</option>
+              </select>
+            </div>
+
+            <div class="button-row">
+              <button class="btn-primary" onclick="runReplay()">Run replay</button>
+            </div>
+          </div>
+
+          <!-- SINGLE -->
+          <div class="control-card">
+            <div class="field-row">
+              <div class="field">
+                <label>Station ID</label>
+                <input type="text" id="single-id" placeholder="PY-SIM-0001">
+              </div>
+              <div class="field">
+                <label>Profile</label>
+                <select id="single-profile">
+                  <option value="default">default</option>
+                  <option value="busy">busy</option>
+                  <option value="idle">idle</option>
+                  <option value="no-transactions">no-transactions</option>
+                  <option value="flaky">flaky</option>
+                </select>
+              </div>
+            </div>
+            <div class="button-row">
+              <button class="btn-primary" onclick="startSingle()">Start</button>
+              <button class="btn-danger" onclick="stopSingle()">Stop</button>
+            </div>
+          </div>
+
+          <!-- BULK -->
+          <div class="control-card bulk-actions">
+            <div class="stat-label">Bulk actions</div>
+            <div class="stat-sub">All stations</div>
+            <div class="button-row bulk-buttons">
+              <button class="btn-primary bulk-btn" onclick="startAllStations()">Start all</button>
+              <button class="btn-danger bulk-btn" onclick="stopAllStations()">Stop all</button>
+            </div>
+
+          </div>
+          <!-- PRICE CONTROL -->
+          <div class="control-card">
+            <div class="stat-label">Charging Price</div>
+            <div class="stat-sub">₹ per kWh (applies immediately)</div>
+
+            <div class="price-box">
+              <span class="price-currency">₹</span>
+              <span class="price-big" id="current-price">20</span>
+              <span class="price-unit">/ kWh</span>
+            </div>
+
+            <div class="button-row">
+              <button class="btn-ghost" onclick="decreasePrice()">−</button>
+              <button class="btn-primary" onclick="increasePrice()">+</button>
+              <button class="btn-danger" onclick="resetPrice()">Reset</button>
+            </div>
+          </div>
+
+        </div>
+      </div> <!-- END TAB SIMULATIONS -->
+
+      <div id="tab-stations" class="tab-content hidden">
+        <!-- TABLE -->
+        <div class="table-card">
+          <table>
+            <thead>
+              <tr>
+                <th>Station ID</th>
+                <th>Profile</th>
+                <th>Status</th>
+                <th>Usage (kW)</th>
+                <th>Energy (kWh)</th>
+                <th>SOC (%)</th>
+                <th>OCPP Status</th>
+                <th>Smart Charging</th>
+                <th>Alerts</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="stations-body"> </tbody>
+          </table>
+        </div>
+      </div> <!-- END TAB STATIONS -->
+
+      <div id="tab-analytics" class="tab-content hidden">
+        <div class="controls-grid" style="grid-template-columns: 1fr;">
+          <div class="control-card">
+            <div class="stat-label">Security Analytics & Threat Intel</div>
+            <div class="stat-sub">Review active knowledge graph alerts and attack detections.</div>
+            <button class="btn-primary" onclick="openSecurityPanel()" style="margin-top: 20px;">Open Full Security
+              Dashboard</button>
           </div>
         </div>
-
-        <!-- BULK -->
-        <div class="control-card bulk-actions">
-          <div class="stat-label">Bulk actions</div>
-          <div class="stat-sub">All stations</div>
-          <div class="button-row bulk-buttons">
-            <button class="btn-primary bulk-btn" onclick="startAllStations()">Start all</button>
-            <button class="btn-danger bulk-btn" onclick="stopAllStations()">Stop all</button>
-          </div>
-
-        </div>
-        <!-- PRICE CONTROL -->
-        <div class="control-card">
-          <div class="stat-label">Charging Price</div>
-          <div class="stat-sub">₹ per kWh (applies immediately)</div>
-
-          <div class="price-box">
-            <span class="price-currency">₹</span>
-            <span class="price-big" id="current-price">20</span>
-            <span class="price-unit">/ kWh</span>
-          </div>
-
-          <div class="button-row">
-            <button class="btn-ghost" onclick="decreasePrice()">−</button>
-            <button class="btn-primary" onclick="increasePrice()">+</button>
-            <button class="btn-danger" onclick="resetPrice()">Reset</button>
-          </div>
-        </div>
-
-      </div>
-
-      <!-- TABLE -->
-      <div class="table-card">
-        <table>
-          <thead>
-            <tr>
-              <th>Station ID</th>
-              <th>Profile</th>
-              <th>Status</th>
-              <th>Usage (kW)</th>
-              <th>Energy (kWh)</th>
-              <th>OCPP Status</th>
-              <th>Smart Charging</th>
-              <th>Alerts</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody id="stations-body"></tbody>
-        </table>
-      </div>
+      </div> <!-- END TAB ANALYTICS -->
 
       <!-- SECURITY SOC PANEL -->
       <div class="modal-overlay hidden" id="security-modal-overlay">
@@ -327,7 +508,10 @@
           <div class="modal-header">
             <h3>Security Operations Center</h3>
             <div class="security-header-actions">
-              <button class="btn-primary" onclick="generateTestAlert()">Check Alerts</button>
+              <button class="btn-primary" onclick="generateTestAlert('charge_manipulation')">Simulate CMA
+                Attack</button>
+              <button class="btn-primary" onclick="generateTestAlert('coordinated_attack')">Simulate Botnet/DDoS
+                (KG)</button>
               <button class="btn-ghost" onclick="refreshSecurity()">Refresh</button>
               <button class="btn-danger" onclick="acknowledgeSecurity()">Acknowledge All</button>
               <button class="btn-close" onclick="closeSecurityPanel()">✕</button>
@@ -401,20 +585,20 @@
             <h3>⚡ Charging Profiles</h3>
             <button class="btn-close" onclick="closeProfileModal()">✕</button>
           </div>
-          
+
           <div class="modal-body">
             <div class="profile-station-info">
               <strong>Station:</strong> <span id="profile-modal-station">-</span>
               <strong>Connector:</strong> <span id="profile-modal-connector">1</span>
             </div>
-            
+
             <div class="profile-section">
               <h4>Active Profiles</h4>
               <div id="profile-list" class="profile-list">
                 <div class="profile-loading">Loading profiles...</div>
               </div>
             </div>
-            
+
             <div class="profile-section">
               <h4>Composite Schedule</h4>
               <div id="composite-schedule" class="composite-schedule">
@@ -422,11 +606,81 @@
               </div>
             </div>
           </div>
-          
+
           <div class="modal-footer">
             <button class="btn-ghost" onclick="refreshProfileModal()">🔄 Refresh</button>
             <button class="btn-danger" onclick="clearProfilesFromModal()">🗑️ Clear All</button>
             <button class="btn-primary" onclick="closeProfileModal()">Close</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- WALLET & PAYMENT MODAL -->
+      <div class="modal-overlay hidden" id="wallet-modal-overlay">
+        <div class="modal-content profile-modal wallet-modal">
+          <div class="modal-header">
+            <h3>💳 Pre-auth Payment</h3>
+            <button class="btn-close" id="wallet-close-btn" type="button">✕</button>
+          </div>
+          <div class="modal-body wallet-modal-body">
+            <p class="wallet-intro">
+              Select payment method to initiate charging at
+              <strong><span id="wallet-station-id"></span></strong>.
+            </p>
+            <div class="wallet-balance-card">
+              <div class="stat-label">Available Wallet Balance</div>
+              <div class="stat-value" id="wallet-balance-value">₹0.00</div>
+            </div>
+            <div class="wallet-meta">Required pre-auth hold: <strong id="wallet-required-hold">₹0.00</strong></div>
+            <div class="wallet-error hidden" id="wallet-balance-error"></div>
+            <div class="wallet-options">
+              <button class="btn-primary wallet-option-btn" id="wallet-pay-wallet-btn" type="button">Pay via Wallet</button>
+              <button class="btn-ghost wallet-option-btn" id="wallet-pay-upi-btn" type="button">UPI / QR</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- DIGITAL RECEIPT MODAL -->
+      <div class="modal-overlay hidden" id="receipt-modal-overlay">
+        <div class="modal-content profile-modal receipt-modal">
+          <div class="modal-header">
+            <h3>🧾 Charging Receipt</h3>
+            <button class="btn-close" id="receipt-close-btn" type="button">✕</button>
+          </div>
+          <div class="modal-body receipt-body">
+            <div class="receipt-total">
+              <h4>Total Cost</h4>
+              <h1>₹<span id="receipt-total-cost">0.00</span></h1>
+              <p><span id="receipt-station-id"></span> • <span id="receipt-date"></span></p>
+            </div>
+
+            <div class="receipt-breakdown">
+              <div class="receipt-row">
+                <span>Energy Consumed</span>
+                <strong><span id="receipt-energy">0.0</span> kWh</strong>
+              </div>
+              <div class="receipt-row">
+                <span>Duration</span>
+                <strong><span id="receipt-duration">0m</span></strong>
+              </div>
+              <div class="receipt-row">
+                <span>Base Rate (₹/kWh)</span>
+                <strong>₹<span id="receipt-rate">20.00</span></strong>
+              </div>
+              <hr>
+              <div class="receipt-row">
+                <span>Subtotal</span>
+                <strong>₹<span id="receipt-subtotal">0.00</span></strong>
+              </div>
+              <div class="receipt-row">
+                <span>GST (18%)</span>
+                <strong>₹<span id="receipt-tax">0.00</span></strong>
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer receipt-footer">
+            <button class="btn-primary receipt-done-btn" id="receipt-done-btn" type="button">Done</button>
           </div>
         </div>
       </div>
@@ -436,12 +690,22 @@
     <div class="error-toast" id="error-toast">
       <span id="error-message"></span>
     </div>
-    
+
+
+    </div>
+
+    <div class="error-toast" id="error-toast">
+      <span id="error-message"></span>
+    </div>
+
     <div class="success-toast" id="success-toast">
       <span id="success-message"></span>
     </div>
   </div>
 
-  <script src="/static/app.js"></script>
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+  <script src="/static/app.js?v=2"></script>
 </body>
+
 </html>

@@ -1,5 +1,6 @@
 import argparse
 import secrets
+from datetime import datetime
 
 from db import create_user, get_user_by_email, init_db
 
@@ -10,6 +11,11 @@ def main() -> None:
 
     create_parser = sub.add_parser("create", help="Create a new user")
     create_parser.add_argument("--email", required=True, help="User email")
+    create_parser.add_argument(
+        "--created-at",
+        required=False,
+        help="ISO8601 timestamp (defaults to now)",
+    )
 
     args = parser.parse_args()
 
@@ -20,7 +26,14 @@ def main() -> None:
             print(f"User already exists: {existing['email']} -> API Key: {existing['api_key']}")
             return
         api_key = secrets.token_urlsafe(32)
-        user = create_user(args.email, api_key)
+        if args.created_at:
+            try:
+                created_at = datetime.fromisoformat(args.created_at)
+            except ValueError as exc:
+                raise RuntimeError("Invalid created-at format") from exc
+        else:
+            created_at = datetime.now()
+        user = create_user(args.email, api_key, created_at)
         print(f"User: {user['email']} -> API Key: {user['api_key']}")
 
 

@@ -29,6 +29,8 @@ from csms_server import (
     create_energy_cap_profile
 )
 
+REPLAY_TIME = datetime(2026, 1, 8, 10, 0, 0, tzinfo=timezone.utc)
+
 
 # =========================================================================
 # FIXTURES
@@ -71,7 +73,7 @@ class TestChargePointMaxProfileLimits:
         profile_manager.add_profile(0, profile)  # Connector 0 = station-wide
         
         # Get limit for any connector
-        limit = profile_manager.get_current_limit(connector_id=1)
+        limit = profile_manager.get_current_limit(connector_id=1, replay_timestamp=REPLAY_TIME)
         
         assert limit == 7400, "ChargePointMaxProfile should limit to 7400W"
     
@@ -81,9 +83,9 @@ class TestChargePointMaxProfileLimits:
         profile_manager.add_profile(0, profile)
         
         # Check multiple connectors
-        assert profile_manager.get_current_limit(connector_id=1) == 11000
-        assert profile_manager.get_current_limit(connector_id=2) == 11000
-        assert profile_manager.get_current_limit(connector_id=3) == 11000
+        assert profile_manager.get_current_limit(connector_id=1, replay_timestamp=REPLAY_TIME) == 11000
+        assert profile_manager.get_current_limit(connector_id=2, replay_timestamp=REPLAY_TIME) == 11000
+        assert profile_manager.get_current_limit(connector_id=3, replay_timestamp=REPLAY_TIME) == 11000
     
     def test_charge_point_max_profile_lower_stack_level_wins(self, profile_manager):
         """Lower stackLevel (higher priority) should take precedence."""
@@ -98,7 +100,7 @@ class TestChargePointMaxProfileLimits:
         profile_manager.add_profile(0, profile2)
         
         # Lower stackLevel should win
-        limit = profile_manager.get_current_limit(connector_id=1)
+        limit = profile_manager.get_current_limit(connector_id=1, replay_timestamp=REPLAY_TIME)
         assert limit == 5000, "Lower stackLevel should have higher priority"
 
 
@@ -118,7 +120,11 @@ class TestTxProfileOverridesBehavior:
         profile_manager.add_profile(1, tx_profile)
         
         # TxProfile should take precedence
-        limit = profile_manager.get_current_limit(connector_id=1, transaction_id=1234)
+        limit = profile_manager.get_current_limit(
+            connector_id=1,
+            replay_timestamp=REPLAY_TIME,
+            transaction_id=1234,
+        )
         assert limit == 7000, "TxProfile should override TxDefaultProfile"
     
     def test_tx_default_used_when_no_tx_profile(self, profile_manager):
@@ -128,7 +134,11 @@ class TestTxProfileOverridesBehavior:
         profile_manager.add_profile(1, default_profile)
         
         # No TxProfile, should use TxDefault
-        limit = profile_manager.get_current_limit(connector_id=1, transaction_id=9999)
+        limit = profile_manager.get_current_limit(
+            connector_id=1,
+            replay_timestamp=REPLAY_TIME,
+            transaction_id=9999,
+        )
         assert limit == 15000, "Should use TxDefaultProfile when no TxProfile"
     
     def test_tx_profile_only_applies_to_specific_transaction(self, profile_manager):
@@ -138,11 +148,19 @@ class TestTxProfileOverridesBehavior:
         profile_manager.add_profile(1, tx_profile)
         
         # Should apply to transaction 1234
-        limit_correct_tx = profile_manager.get_current_limit(connector_id=1, transaction_id=1234)
+        limit_correct_tx = profile_manager.get_current_limit(
+            connector_id=1,
+            replay_timestamp=REPLAY_TIME,
+            transaction_id=1234,
+        )
         assert limit_correct_tx == 5000
         
         # Should NOT apply to different transaction
-        limit_wrong_tx = profile_manager.get_current_limit(connector_id=1, transaction_id=5678)
+        limit_wrong_tx = profile_manager.get_current_limit(
+            connector_id=1,
+            replay_timestamp=REPLAY_TIME,
+            transaction_id=5678,
+        )
         assert limit_wrong_tx is None, "TxProfile should not apply to different transaction"
 
 
@@ -158,8 +176,8 @@ class TestTimeOfUseProfileSchedule:
         # Test at 12:00 (off-peak)
         time_offpeak = datetime(2026, 1, 8, 12, 0, 0, tzinfo=timezone.utc)
         limit_offpeak = profile_manager.get_current_limit(
-            connector_id=1, 
-            current_time=time_offpeak
+            connector_id=1,
+            replay_timestamp=time_offpeak,
         )
         assert limit_offpeak == 22000, "Off-peak should be 22kW"
         
@@ -167,7 +185,7 @@ class TestTimeOfUseProfileSchedule:
         time_peak = datetime(2026, 1, 8, 19, 0, 0, tzinfo=timezone.utc)
         limit_peak = profile_manager.get_current_limit(
             connector_id=1,
-            current_time=time_peak
+            replay_timestamp=time_peak,
         )
         assert limit_peak == 7000, "Peak should be 7kW"
         
@@ -175,7 +193,7 @@ class TestTimeOfUseProfileSchedule:
         time_after_peak = datetime(2026, 1, 8, 23, 0, 0, tzinfo=timezone.utc)
         limit_after = profile_manager.get_current_limit(
             connector_id=1,
-            current_time=time_after_peak
+            replay_timestamp=time_after_peak,
         )
         assert limit_after == 22000, "After peak should be 22kW again"
     
@@ -188,8 +206,8 @@ class TestTimeOfUseProfileSchedule:
         day1_peak = datetime(2026, 1, 8, 10, 0, 0, tzinfo=timezone.utc)
         day2_peak = datetime(2026, 1, 9, 10, 0, 0, tzinfo=timezone.utc)
         
-        limit_day1 = profile_manager.get_current_limit(connector_id=1, current_time=day1_peak)
-        limit_day2 = profile_manager.get_current_limit(connector_id=1, current_time=day2_peak)
+        limit_day1 = profile_manager.get_current_limit(connector_id=1, replay_timestamp=day1_peak)
+        limit_day2 = profile_manager.get_current_limit(connector_id=1, replay_timestamp=day2_peak)
         
         assert limit_day1 == 10000, "Day 1 peak should be 10kW"
         assert limit_day2 == 10000, "Day 2 peak should be 10kW (recurring)"
@@ -205,13 +223,13 @@ class TestProfileClearingRestoresLegacy:
         profile_manager.add_profile(1, profile)
         
         # Verify OCPP control active
-        assert profile_manager.get_current_limit(connector_id=1) == 7400
+        assert profile_manager.get_current_limit(connector_id=1, replay_timestamp=REPLAY_TIME) == 7400
         
         # Clear all profiles
         profile_manager.clear_profile(connector_id=1)
         
         # Should return None (legacy policy)
-        assert profile_manager.get_current_limit(connector_id=1) is None
+        assert profile_manager.get_current_limit(connector_id=1, replay_timestamp=REPLAY_TIME) is None
     
     def test_clear_specific_profile_by_id(self, profile_manager):
         """Clearing specific profile ID should remove only that profile."""
@@ -225,13 +243,13 @@ class TestProfileClearingRestoresLegacy:
         profile_manager.add_profile(1, profile2)
         
         # Profile 2 (7.4kW) should be active
-        assert profile_manager.get_current_limit(connector_id=1) == 7400
+        assert profile_manager.get_current_limit(connector_id=1, replay_timestamp=REPLAY_TIME) == 7400
         
         # Clear profile 2
         profile_manager.clear_profile(profile_id=2)
         
         # Profile 1 (11kW) should now be active
-        assert profile_manager.get_current_limit(connector_id=1) == 11000
+        assert profile_manager.get_current_limit(connector_id=1, replay_timestamp=REPLAY_TIME) == 11000
 
 
 class TestProfileExpiration:
@@ -242,13 +260,13 @@ class TestProfileExpiration:
         profile = create_charge_point_max_profile(1, 7400)
         
         # Set validTo to 1 hour ago
-        expired_time = datetime.now(timezone.utc) - timedelta(hours=1)
+        expired_time = REPLAY_TIME - timedelta(hours=1)
         profile['validTo'] = expired_time.isoformat()
         
         profile_manager.add_profile(1, profile)
         
         # Should return None because profile is expired
-        limit = profile_manager.get_current_limit(connector_id=1)
+        limit = profile_manager.get_current_limit(connector_id=1, replay_timestamp=REPLAY_TIME)
         assert limit is None, "Expired profile should not be applied"
     
     def test_valid_profile_applied_before_expiry(self, profile_manager):
@@ -256,13 +274,13 @@ class TestProfileExpiration:
         profile = create_charge_point_max_profile(1, 5000)
         
         # Set validTo to 1 hour from now
-        valid_time = datetime.now(timezone.utc) + timedelta(hours=1)
+        valid_time = REPLAY_TIME + timedelta(hours=1)
         profile['validTo'] = valid_time.isoformat()
         
         profile_manager.add_profile(1, profile)
         
         # Should be applied
-        limit = profile_manager.get_current_limit(connector_id=1)
+        limit = profile_manager.get_current_limit(connector_id=1, replay_timestamp=REPLAY_TIME)
         assert limit == 5000, "Valid profile should be applied"
 
 
@@ -287,7 +305,11 @@ class TestMultipleProfileStacking:
         profile_manager.add_profile(1, tx_profile)
         
         # TxProfile should win
-        limit = profile_manager.get_current_limit(connector_id=1, transaction_id=1234)
+        limit = profile_manager.get_current_limit(
+            connector_id=1,
+            replay_timestamp=REPLAY_TIME,
+            transaction_id=1234,
+        )
         assert limit == 7000, "TxProfile has highest priority"
     
     def test_stack_level_priority_within_same_purpose(self, profile_manager):
@@ -303,11 +325,12 @@ class TestMultipleProfileStacking:
         profile_manager.add_profile(0, profile_low)
         
         # Lower stackLevel should win
-        limit = profile_manager.get_current_limit(connector_id=1)
+        limit = profile_manager.get_current_limit(connector_id=1, replay_timestamp=REPLAY_TIME)
         assert limit == 11000, "Lower stackLevel has higher priority"
     
     def test_composite_schedule_merges_multiple_profiles(self, profile_manager):
         """Composite schedule should merge multiple active profiles."""
+        start_time = datetime(2026, 1, 8, 10, 0, 0, tzinfo=timezone.utc)
         # Add ChargePointMax (22kW)
         cp_max = create_charge_point_max_profile(1, 22000)
         profile_manager.add_profile(0, cp_max)
@@ -320,7 +343,8 @@ class TestMultipleProfileStacking:
         schedule = profile_manager.get_composite_schedule(
             connector_id=1,
             duration=86400,
-            charging_rate_unit=ChargingRateUnit.W
+            charging_rate_unit=ChargingRateUnit.W,
+            start_time=start_time,
         )
         
         assert schedule is not None, "Should return composite schedule"
@@ -773,7 +797,7 @@ class TestStationCSMSIntegration:
         profile_manager.add_profile(1, profile)
         
         # 3. Station enforces during charging
-        limit = profile_manager.get_current_limit(connector_id=1)
+        limit = profile_manager.get_current_limit(connector_id=1, replay_timestamp=REPLAY_TIME)
         
         assert limit == 7400, "Station should enforce CSMS profile"
     

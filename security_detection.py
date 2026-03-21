@@ -12,6 +12,10 @@ from security_monitor import EventType, security_monitor
 
 logger = logging.getLogger("security_detection")
 
+DOMAIN = "SECURITY"
+if DOMAIN == "CHARGING":
+    raise RuntimeError("Security module cannot run in CHARGING domain")
+
 
 @dataclass
 class DetectionRule:
@@ -84,7 +88,14 @@ class RuleEvaluator:
         try:
             with open(self.rules_path, "r", encoding="utf-8") as f:
                 raw = json.load(f)
-            self._rules = [DetectionRule(**rule) for rule in raw]
+            # Extract rules from the proper location in the JSON structure
+            if isinstance(raw, dict) and "legacy_threshold_rules" in raw:
+                rules_data = raw["legacy_threshold_rules"]
+            elif isinstance(raw, list):
+                rules_data = raw
+            else:
+                rules_data = []
+            self._rules = [DetectionRule(**rule) for rule in rules_data]
             logger.info("Loaded %d detection rules from %s", len(self._rules), self.rules_path)
         except Exception as exc:
             logger.warning("Failed to load detection rules: %s", exc)

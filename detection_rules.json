@@ -1,52 +1,213 @@
-[
-  {
-    "name": "Authorize Flood",
-    "event_type": "AUTH_REQUEST",
-    "threshold": 5,
-    "window_seconds": 60,
-    "station_scope": true,
-    "severity": "warning",
-    "description": "Too many Authorize requests from same station",
-    "alert_event_type": "AUTH_FAILURE"
-  },
-  {
-    "name": "Suspicious Reboot Loop",
-    "event_type": "BOOT_NOTIFICATION",
-    "threshold": 3,
-    "window_seconds": 30,
-    "station_scope": true,
-    "severity": "warning",
-    "description": "Repeated BootNotification bursts",
-    "alert_event_type": "HEARTBEAT_FLOOD"
-  },
-  {
-    "name": "Energy Spam or Spoof",
-    "event_type": "METER_VALUES",
-    "threshold": 10,
-    "window_seconds": 30,
-    "station_scope": true,
-    "severity": "warning",
-    "description": "Excessive MeterValues messages detected",
-    "alert_event_type": "HEARTBEAT_FLOOD"
-  },
-  {
-    "name": "Station Spoof Attempt",
-    "event_type": "UNKNOWN_STATION",
-    "threshold": 1,
-    "window_seconds": 60,
-    "station_scope": false,
-    "severity": "critical",
-    "description": "Unknown ChargeBoxId attempting to connect",
-    "alert_event_type": "UNAUTHORIZED_COMMAND"
-  },
-  {
-    "name": "Malformed Payload",
-    "event_type": "MALFORMED_PAYLOAD",
-    "threshold": 1,
-    "window_seconds": 60,
-    "station_scope": true,
-    "severity": "critical",
-    "description": "Malformed or invalid payload received",
-    "alert_event_type": "MALFORMED_MESSAGE"
+{
+  "version": "2.0_security_enhanced",
+  "legacy_threshold_rules": [
+    {
+      "name": "Authorize Flood",
+      "event_type": "AUTH_REQUEST",
+      "threshold": 5,
+      "window_seconds": 60,
+      "station_scope": true,
+      "severity": "warning",
+      "description": "Too many Authorize requests from same station",
+      "alert_event_type": "AUTH_FAILURE"
+    },
+    {
+      "name": "Suspicious Reboot Loop",
+      "event_type": "BOOT_NOTIFICATION",
+      "threshold": 3,
+      "window_seconds": 30,
+      "station_scope": true,
+      "severity": "warning",
+      "description": "Repeated BootNotification bursts",
+      "alert_event_type": "HEARTBEAT_FLOOD"
+    },
+    {
+      "name": "Energy Spam or Spoof",
+      "event_type": "METER_VALUES",
+      "threshold": 10,
+      "window_seconds": 30,
+      "station_scope": true,
+      "severity": "warning",
+      "description": "Excessive MeterValues messages detected",
+      "alert_event_type": "HEARTBEAT_FLOOD"
+    },
+    {
+      "name": "Station Spoof Attempt",
+      "event_type": "UNKNOWN_STATION",
+      "threshold": 1,
+      "window_seconds": 60,
+      "station_scope": false,
+      "severity": "critical",
+      "description": "Unknown ChargeBoxId attempting to connect",
+      "alert_event_type": "UNAUTHORIZED_COMMAND"
+    },
+    {
+      "name": "Malformed Payload",
+      "event_type": "MALFORMED_PAYLOAD",
+      "threshold": 1,
+      "window_seconds": 60,
+      "station_scope": true,
+      "severity": "critical",
+      "description": "Malformed or invalid payload received",
+      "alert_event_type": "MALFORMED_MESSAGE"
+    },
+    {
+      "name": "Charge Manipulation (CMA)",
+      "event_type": "SET_CHARGING_PROFILE",
+      "threshold": 3,
+      "window_seconds": 60,
+      "station_scope": true,
+      "severity": "critical",
+      "description": "Excessive SetChargingProfile requests attempting to manipulate energy bounds",
+      "alert_event_type": "CHARGE_MANIPULATION_ATTACK"
+    },
+    {
+      "name": "Rapid Session Cycling",
+      "event_type": "START_TRANSACTION",
+      "threshold": 4,
+      "window_seconds": 120,
+      "station_scope": true,
+      "severity": "high",
+      "description": "Rapid start/stop cycles predicting battery tampering or Plug & Charge exploitation",
+      "alert_event_type": "PROFILE_TAMPERING"
+    },
+    {
+      "name": "Network Flooding attempt",
+      "event_type": "BOOT_NOTIFICATION",
+      "threshold": 20,
+      "window_seconds": 60,
+      "station_scope": false,
+      "severity": "critical",
+      "description": "Global BootNotification flood indicating network-wide DoS attempt",
+      "alert_event_type": "COORDINATED_ATTACK_DETECTED"
+    }
+  ],
+  "security_enhancements": {
+    "charge_manipulation_attack": {
+      "scope_key": "charge_point_id",
+      "rules": {
+        "max_current_ac_amp": {
+          "default": 32,
+          "severity_mapping": {
+            "LOW": 34,
+            "MEDIUM": 40,
+            "HIGH": 48,
+            "CRITICAL": 64
+          },
+          "anomaly_score_weight": 0.18
+        },
+        "max_current_dc_amp": {
+          "default": 200,
+          "severity_mapping": {
+            "LOW": 220,
+            "MEDIUM": 260,
+            "HIGH": 320,
+            "CRITICAL": 400
+          },
+          "anomaly_score_weight": 0.2
+        },
+        "min_current_amp": {
+          "default": 6,
+          "severity_mapping": {
+            "LOW": 5,
+            "MEDIUM": 4,
+            "HIGH": 3,
+            "CRITICAL": 2
+          },
+          "anomaly_score_weight": 0.12
+        },
+        "max_profile_updates_per_minute": {
+          "default": 6,
+          "severity_mapping": {
+            "LOW": 7,
+            "MEDIUM": 10,
+            "HIGH": 15,
+            "CRITICAL": 20
+          },
+          "anomaly_score_weight": 0.14
+        },
+        "max_configuration_changes_per_5min": {
+          "default": 8,
+          "severity_mapping": {
+            "LOW": 9,
+            "MEDIUM": 12,
+            "HIGH": 18,
+            "CRITICAL": 24
+          },
+          "anomaly_score_weight": 0.14
+        },
+        "profile_stack_level_limit": {
+          "default": 5,
+          "severity_mapping": {
+            "LOW": 6,
+            "MEDIUM": 8,
+            "HIGH": 10,
+            "CRITICAL": 12
+          },
+          "anomaly_score_weight": 0.22
+        }
+      }
+    },
+    "iso_15118_session_anomalies": {
+      "scope_key": "charge_point_id",
+      "rules": {
+        "max_session_start_stop_cycles_per_10min": {
+          "default": 6,
+          "severity_mapping": {
+            "LOW": 7,
+            "MEDIUM": 10,
+            "HIGH": 14,
+            "CRITICAL": 18
+          },
+          "anomaly_score_weight": 0.4
+        },
+        "min_session_duration_seconds": {
+          "default": 30,
+          "severity_mapping": {
+            "LOW": 25,
+            "MEDIUM": 20,
+            "HIGH": 15,
+            "CRITICAL": 10
+          },
+          "anomaly_score_weight": 0.3
+        },
+        "rapid_auth_attempt_threshold": {
+          "default": 5,
+          "severity_mapping": {
+            "LOW": 6,
+            "MEDIUM": 8,
+            "HIGH": 12,
+            "CRITICAL": 16
+          },
+          "anomaly_score_weight": 0.3
+        }
+      }
+    },
+    "distributed_dos_detection": {
+      "scope_key": "global",
+      "time_window_seconds": 60,
+      "rules": {
+        "global_command_rate_threshold": {
+          "default": 250,
+          "severity_mapping": {
+            "LOW": 300,
+            "MEDIUM": 400,
+            "HIGH": 550,
+            "CRITICAL": 700
+          },
+          "anomaly_score_weight": 0.45
+        },
+        "simultaneous_station_spike_threshold": {
+          "default": 20,
+          "severity_mapping": {
+            "LOW": 25,
+            "MEDIUM": 35,
+            "HIGH": 50,
+            "CRITICAL": 70
+          },
+          "anomaly_score_weight": 0.55
+        }
+      }
+    }
   }
-]
+}

@@ -237,6 +237,8 @@ class TestSetChargingProfile:
 class TestGetCompositeSchedule:
     """Test GetCompositeSchedule OCPP message handling."""
 
+    START_TIME = datetime(2026, 1, 8, 10, 0, 0, tzinfo=timezone.utc)
+
     @pytest.mark.asyncio
     async def test_get_composite_schedule_single_profile(self, charge_point):
         """GetCompositeSchedule returns valid schedule from single profile."""
@@ -264,7 +266,8 @@ class TestGetCompositeSchedule:
         # Get composite schedule
         response = await charge_point.on_get_composite_schedule(
             connector_id=1,
-            duration=3600
+            duration=3600,
+            start_time=self.START_TIME,
         )
 
         assert response.status == "Accepted"
@@ -277,7 +280,8 @@ class TestGetCompositeSchedule:
         """GetCompositeSchedule returns Rejected when no profiles exist."""
         response = await charge_point.on_get_composite_schedule(
             connector_id=1,
-            duration=3600
+            duration=3600,
+            start_time=self.START_TIME,
         )
 
         assert response.status == "Rejected"
@@ -309,7 +313,8 @@ class TestGetCompositeSchedule:
         response = await charge_point.on_get_composite_schedule(
             connector_id=1,
             duration=3600,
-            charging_rate_unit="W"
+            charging_rate_unit="W",
+            start_time=self.START_TIME,
         )
 
         assert response.status == "Accepted"
@@ -361,7 +366,8 @@ class TestGetCompositeSchedule:
         # Get composite schedule - should use minimum (11kW)
         response = await charge_point.on_get_composite_schedule(
             connector_id=1,
-            duration=3600
+            duration=3600,
+            start_time=self.START_TIME,
         )
 
         assert response.status == "Accepted"
@@ -616,7 +622,8 @@ class TestProfileStacking:
 
         response = await charge_point.on_get_composite_schedule(
             connector_id=1,
-            duration=3600
+            duration=3600,
+            start_time=self.START_TIME,
         )
 
         assert response.status == "Accepted"
@@ -658,7 +665,8 @@ class TestProfileStacking:
 
         response = await charge_point.on_get_composite_schedule(
             connector_id=1,
-            duration=3600
+            duration=3600,
+            start_time="2026-01-08T10:00:00+00:00",
         )
 
         assert response.status == "Accepted"
@@ -714,7 +722,8 @@ class TestProfileStacking:
 
         response = await charge_point.on_get_composite_schedule(
             connector_id=1,
-            duration=3600
+            duration=3600,
+            start_time="2026-01-08T10:00:00+00:00",
         )
 
         assert response.status == "Accepted"
@@ -729,7 +738,7 @@ class TestExpiredProfiles:
     async def test_expired_profile_ignored(self, charge_point):
         """Expired profile (past validTo) is not included in composite schedule."""
         # Profile that expired 1 hour ago
-        expired_time = datetime.now(timezone.utc) - timedelta(hours=1)
+        expired_time = self.START_TIME - timedelta(hours=1)
         
         profile = {
             "chargingProfileId": 1,
@@ -748,7 +757,8 @@ class TestExpiredProfiles:
 
         response = await charge_point.on_get_composite_schedule(
             connector_id=1,
-            duration=3600
+            duration=3600,
+            start_time=(expired_time + timedelta(seconds=1)),
         )
 
         # Should be rejected since profile is expired
@@ -758,7 +768,7 @@ class TestExpiredProfiles:
     async def test_future_profile_ignored(self, charge_point):
         """Profile with future validFrom is not yet active."""
         # Profile that becomes valid 1 hour from now
-        future_time = datetime.now(timezone.utc) + timedelta(hours=1)
+        future_time = self.START_TIME + timedelta(hours=1)
         
         profile = {
             "chargingProfileId": 1,
@@ -777,7 +787,8 @@ class TestExpiredProfiles:
 
         response = await charge_point.on_get_composite_schedule(
             connector_id=1,
-            duration=3600
+            duration=3600,
+            start_time=(future_time - timedelta(seconds=1)),
         )
 
         # Should be rejected since profile is not yet valid
@@ -786,8 +797,8 @@ class TestExpiredProfiles:
     @pytest.mark.asyncio
     async def test_valid_profile_within_time_window(self, charge_point):
         """Profile within validFrom/validTo window is included."""
-        past_time = datetime.now(timezone.utc) - timedelta(hours=1)
-        future_time = datetime.now(timezone.utc) + timedelta(hours=1)
+        past_time = self.START_TIME - timedelta(hours=1)
+        future_time = self.START_TIME + timedelta(hours=1)
         
         profile = {
             "chargingProfileId": 1,
@@ -807,7 +818,8 @@ class TestExpiredProfiles:
 
         response = await charge_point.on_get_composite_schedule(
             connector_id=1,
-            duration=3600
+            duration=3600,
+            start_time=(past_time + timedelta(seconds=1)),
         )
 
         assert response.status == "Accepted"

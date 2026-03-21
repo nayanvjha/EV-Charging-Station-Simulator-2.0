@@ -1,0 +1,402 @@
+INFO:security:SecurityMonitor running in in-memory mode
+INFO:security_detection:Loaded 8 detection rules from detection_rules.json
+WARNING:controller_api:Wall-clock guard warning ignored: Wall-clock usage forbidden in knowledge_graph.py
+INFO:     Started server process [12182]
+INFO:     Waiting for application startup.
+INFO:db:Database initialized: sqlite:////Volumes/Crucial/Dev/24version_3 2/simulator.db
+WARNING:controller_api:RUNNING IN STRICT MODE — CORRECTNESS ONLY
+INFO:controller_api:Prometheus metrics server started on http://0.0.0.0:9100/metrics
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+WARNING:controller_api:Template landing.html not found; falling back to index.html
+INFO:     127.0.0.1:52433 - "GET / HTTP/1.1" 200 OK
+WARNING:controller_api:Template landing.html not found; falling back to index.html
+INFO:     127.0.0.1:52435 - "GET / HTTP/1.1" 200 OK
+WARNING:controller_api:Template landing.html not found; falling back to index.html
+INFO:     127.0.0.1:52483 - "GET / HTTP/1.1" 200 OK
+WARNING:controller_api:Template landing.html not found; falling back to index.html
+INFO:     127.0.0.1:52513 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52513 - "GET /static/app.js?v=2 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52532 - "GET /pricing HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52533 - "GET /api/v1/security/events?limit=200 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52534 - "GET /api/v1/security/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52534 - "GET /totals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52534 - "GET /stations/state HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52534 - "GET /stations/state HTTP/1.1" 200 OK
+WARNING:controller_api:Live station execution requested; switching to REAL_CSV mode
+INFO:     127.0.0.1:52559 - "POST /stations/scale HTTP/1.1" 200 OK
+INFO:charging_profile_manager:ChargingProfileManager initialized
+INFO:protocol_station:PY-SIM-0001: Auto transactions disabled; replay engine must drive charging
+INFO:charging_profile_manager:ChargingProfileManager initialized
+INFO:protocol_station:PY-SIM-0002: Auto transactions disabled; replay engine must drive charging
+INFO:charging_profile_manager:ChargingProfileManager initialized
+INFO:charging_profile_manager:ChargingProfileManager initialized
+INFO:charging_profile_manager:ChargingProfileManager initialized
+INFO:protocol_station:PY-SIM-0003: Auto transactions disabled; replay engine must drive charging
+INFO:protocol_station:PY-SIM-0004: Auto transactions disabled; replay engine must drive charging
+INFO:protocol_station:PY-SIM-0005: Auto transactions disabled; replay engine must drive charging
+INFO:ocpp:PY-SIM-0004: send [2,"3f1a8304-2734-48b6-b118-7344648c3cc5","BootNotification",{"chargePointModel":"PythonSim-Model","chargePointVendor":"PythonSim-Vendor"}]
+INFO:ocpp:PY-SIM-0003: send [2,"069a4f54-5b4c-4870-b9d6-04bb00b9522d","BootNotification",{"chargePointModel":"PythonSim-Model","chargePointVendor":"PythonSim-Vendor"}]
+INFO:ocpp:PY-SIM-0001: send [2,"b8576541-00db-445d-bde7-7f7e4ca52287","BootNotification",{"chargePointModel":"PythonSim-Model","chargePointVendor":"PythonSim-Vendor"}]
+INFO:ocpp:PY-SIM-0002: send [2,"e39be54d-d143-470b-bc10-0bbc834490ec","BootNotification",{"chargePointModel":"PythonSim-Model","chargePointVendor":"PythonSim-Vendor"}]
+INFO:ocpp:PY-SIM-0005: send [2,"0e6c0e49-b11d-4b88-aab8-4910bbbbcc46","BootNotification",{"chargePointModel":"PythonSim-Model","chargePointVendor":"PythonSim-Vendor"}]
+INFO:ocpp:PY-SIM-0005: receive message [3,"0e6c0e49-b11d-4b88-aab8-4910bbbbcc46",{"currentTime":"2026-03-11T17:29:01.654122+00:00","interval":60,"status":"Accepted"}]
+INFO:ocpp:PY-SIM-0003: receive message [3,"069a4f54-5b4c-4870-b9d6-04bb00b9522d",{"currentTime":"2026-03-11T17:29:01.653045+00:00","interval":60,"status":"Accepted"}]
+INFO:ocpp:PY-SIM-0001: receive message [3,"b8576541-00db-445d-bde7-7f7e4ca52287",{"currentTime":"2026-03-11T17:29:01.653358+00:00","interval":60,"status":"Accepted"}]
+INFO:ocpp:PY-SIM-0002: receive message [3,"e39be54d-d143-470b-bc10-0bbc834490ec",{"currentTime":"2026-03-11T17:29:01.654407+00:00","interval":60,"status":"Accepted"}]
+INFO:ocpp:PY-SIM-0004: receive message [3,"3f1a8304-2734-48b6-b118-7344648c3cc5",{"currentTime":"2026-03-11T17:29:01.652757+00:00","interval":60,"status":"Accepted"}]
+INFO:protocol_station:PY-SIM-0003: BootNotification response: BootNotification(current_time='2026-03-11T17:29:01.653045+00:00', interval=60, status='Accepted')
+INFO:protocol_station:PY-SIM-0004: BootNotification response: BootNotification(current_time='2026-03-11T17:29:01.652757+00:00', interval=60, status='Accepted')
+INFO:protocol_station:PY-SIM-0005: BootNotification response: BootNotification(current_time='2026-03-11T17:29:01.654122+00:00', interval=60, status='Accepted')
+INFO:protocol_station:PY-SIM-0001: BootNotification response: BootNotification(current_time='2026-03-11T17:29:01.653358+00:00', interval=60, status='Accepted')
+INFO:protocol_station:PY-SIM-0002: BootNotification response: BootNotification(current_time='2026-03-11T17:29:01.654407+00:00', interval=60, status='Accepted')
+INFO:ocpp:PY-SIM-0001: send [2,"d0b237c4-ba9d-47c0-b075-40ba7b5d8f69","StatusNotification",{"connectorId":1,"errorCode":"NoError","status":"Available","timestamp":"2026-03-11T17:29:01.658973+00:00"}]
+INFO:ocpp:PY-SIM-0003: send [2,"833cd456-ae3d-488f-a9b9-78140737c1b6","StatusNotification",{"connectorId":1,"errorCode":"NoError","status":"Available","timestamp":"2026-03-11T17:29:01.658368+00:00"}]
+INFO:ocpp:PY-SIM-0004: send [2,"0915cb7f-142c-49cf-9337-744613defa79","StatusNotification",{"connectorId":1,"errorCode":"NoError","status":"Available","timestamp":"2026-03-11T17:29:01.658621+00:00"}]
+INFO:ocpp:PY-SIM-0005: send [2,"90ec3a9f-912d-40c1-9e07-1b041238b754","StatusNotification",{"connectorId":1,"errorCode":"NoError","status":"Available","timestamp":"2026-03-11T17:29:01.658833+00:00"}]
+INFO:ocpp:PY-SIM-0002: send [2,"7e1c4441-5623-47c3-862d-7369a6f62af6","StatusNotification",{"connectorId":1,"errorCode":"NoError","status":"Available","timestamp":"2026-03-11T17:29:01.659374+00:00"}]
+INFO:ocpp:PY-SIM-0001: receive message [3,"d0b237c4-ba9d-47c0-b075-40ba7b5d8f69",{}]
+INFO:ocpp:PY-SIM-0004: receive message [3,"0915cb7f-142c-49cf-9337-744613defa79",{}]
+INFO:ocpp:PY-SIM-0002: receive message [3,"7e1c4441-5623-47c3-862d-7369a6f62af6",{}]
+INFO:ocpp:PY-SIM-0005: receive message [3,"90ec3a9f-912d-40c1-9e07-1b041238b754",{}]
+INFO:ocpp:PY-SIM-0003: receive message [3,"833cd456-ae3d-488f-a9b9-78140737c1b6",{}]
+INFO:protocol_station:PY-SIM-0001: StatusNotification -> StatusNotification()
+INFO:protocol_station:PY-SIM-0003: StatusNotification -> StatusNotification()
+INFO:protocol_station:PY-SIM-0005: StatusNotification -> StatusNotification()
+INFO:protocol_station:PY-SIM-0004: StatusNotification -> StatusNotification()
+INFO:protocol_station:PY-SIM-0002: StatusNotification -> StatusNotification()
+INFO:     127.0.0.1:52559 - "GET /stations/state HTTP/1.1" 200 OK
+INFO:ocpp:PY-SIM-0003: send [2,"26dc66bc-93a9-4dbb-9584-af5e5df97135","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0001: send [2,"e3f96306-3fe8-470a-9f37-07749bca8275","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0004: send [2,"8059a7c8-bcd1-47a9-bc98-c175aabb994a","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0005: send [2,"03d6dad9-92ec-47f7-be6f-46cb2178b099","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0002: send [2,"42280924-6054-4d4a-a818-3b6f3f4aa963","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0001: receive message [3,"e3f96306-3fe8-470a-9f37-07749bca8275",{"currentTime":"2026-03-11T17:30:01.678966+00:00"}]
+INFO:ocpp:PY-SIM-0003: receive message [3,"26dc66bc-93a9-4dbb-9584-af5e5df97135",{"currentTime":"2026-03-11T17:30:01.674796+00:00"}]
+INFO:ocpp:PY-SIM-0005: receive message [3,"03d6dad9-92ec-47f7-be6f-46cb2178b099",{"currentTime":"2026-03-11T17:30:01.674130+00:00"}]
+INFO:ocpp:PY-SIM-0004: receive message [3,"8059a7c8-bcd1-47a9-bc98-c175aabb994a",{"currentTime":"2026-03-11T17:30:01.673497+00:00"}]
+INFO:protocol_station:PY-SIM-0003: Heartbeat -> Heartbeat(current_time='2026-03-11T17:30:01.674796+00:00')
+INFO:ocpp:PY-SIM-0002: receive message [3,"42280924-6054-4d4a-a818-3b6f3f4aa963",{"currentTime":"2026-03-11T17:30:01.678085+00:00"}]
+INFO:protocol_station:PY-SIM-0005: Heartbeat -> Heartbeat(current_time='2026-03-11T17:30:01.674130+00:00')
+INFO:protocol_station:PY-SIM-0004: Heartbeat -> Heartbeat(current_time='2026-03-11T17:30:01.673497+00:00')
+INFO:protocol_station:PY-SIM-0001: Heartbeat -> Heartbeat(current_time='2026-03-11T17:30:01.678966+00:00')
+INFO:protocol_station:PY-SIM-0002: Heartbeat -> Heartbeat(current_time='2026-03-11T17:30:01.678085+00:00')
+INFO:     127.0.0.1:52603 - "GET /api/v1/security/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52602 - "GET /api/v1/security/events?limit=200 HTTP/1.1" 200 OK
+INFO:ocpp:PY-SIM-0005: send [2,"427c91ec-35b1-4332-83de-0167d67461e7","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0001: send [2,"985313a6-f7e2-4778-a461-838431dd1587","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0002: send [2,"c5db325e-e043-4328-8c0c-b6b5ceab5633","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0003: send [2,"474390d5-be99-40e7-97a3-aabc4231f1e4","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0004: send [2,"66b9b4ec-673b-4843-b7fc-660b2c7ad419","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0005: receive message [3,"427c91ec-35b1-4332-83de-0167d67461e7",{"currentTime":"2026-03-11T17:31:01.835638+00:00"}]
+INFO:ocpp:PY-SIM-0001: receive message [3,"985313a6-f7e2-4778-a461-838431dd1587",{"currentTime":"2026-03-11T17:31:01.849250+00:00"}]
+INFO:ocpp:PY-SIM-0002: receive message [3,"c5db325e-e043-4328-8c0c-b6b5ceab5633",{"currentTime":"2026-03-11T17:31:01.850475+00:00"}]
+INFO:ocpp:PY-SIM-0003: receive message [3,"474390d5-be99-40e7-97a3-aabc4231f1e4",{"currentTime":"2026-03-11T17:31:01.852304+00:00"}]
+INFO:ocpp:PY-SIM-0004: receive message [3,"66b9b4ec-673b-4843-b7fc-660b2c7ad419",{"currentTime":"2026-03-11T17:31:01.852603+00:00"}]
+INFO:protocol_station:PY-SIM-0005: Heartbeat -> Heartbeat(current_time='2026-03-11T17:31:01.835638+00:00')
+INFO:protocol_station:PY-SIM-0001: Heartbeat -> Heartbeat(current_time='2026-03-11T17:31:01.849250+00:00')
+INFO:protocol_station:PY-SIM-0002: Heartbeat -> Heartbeat(current_time='2026-03-11T17:31:01.850475+00:00')
+INFO:protocol_station:PY-SIM-0003: Heartbeat -> Heartbeat(current_time='2026-03-11T17:31:01.852304+00:00')
+INFO:protocol_station:PY-SIM-0004: Heartbeat -> Heartbeat(current_time='2026-03-11T17:31:01.852603+00:00')
+INFO:ocpp:PY-SIM-0005: send [2,"d4b1a67b-a4ff-448a-891f-205485025ef6","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0001: send [2,"d656cc11-ef86-4cb4-93ae-04e44499c4bd","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0002: send [2,"2759a334-85b2-442c-97d5-dab7e969a5fb","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0003: send [2,"f7dab584-4150-4220-b3ca-8c1b7c8f5dde","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0004: send [2,"9522d0ea-8b0e-4273-9ecb-5c5e8428a10e","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0005: receive message [3,"d4b1a67b-a4ff-448a-891f-205485025ef6",{"currentTime":"2026-03-11T17:32:01.905509+00:00"}]
+INFO:protocol_station:PY-SIM-0005: Heartbeat -> Heartbeat(current_time='2026-03-11T17:32:01.905509+00:00')
+INFO:ocpp:PY-SIM-0001: receive message [3,"d656cc11-ef86-4cb4-93ae-04e44499c4bd",{"currentTime":"2026-03-11T17:32:01.907974+00:00"}]
+INFO:ocpp:PY-SIM-0002: receive message [3,"2759a334-85b2-442c-97d5-dab7e969a5fb",{"currentTime":"2026-03-11T17:32:01.908309+00:00"}]
+INFO:ocpp:PY-SIM-0003: receive message [3,"f7dab584-4150-4220-b3ca-8c1b7c8f5dde",{"currentTime":"2026-03-11T17:32:01.908599+00:00"}]
+INFO:ocpp:PY-SIM-0004: receive message [3,"9522d0ea-8b0e-4273-9ecb-5c5e8428a10e",{"currentTime":"2026-03-11T17:32:01.908956+00:00"}]
+INFO:protocol_station:PY-SIM-0001: Heartbeat -> Heartbeat(current_time='2026-03-11T17:32:01.907974+00:00')
+INFO:protocol_station:PY-SIM-0002: Heartbeat -> Heartbeat(current_time='2026-03-11T17:32:01.908309+00:00')
+INFO:protocol_station:PY-SIM-0003: Heartbeat -> Heartbeat(current_time='2026-03-11T17:32:01.908599+00:00')
+INFO:protocol_station:PY-SIM-0004: Heartbeat -> Heartbeat(current_time='2026-03-11T17:32:01.908956+00:00')
+INFO:ocpp:PY-SIM-0005: send [2,"676616a0-61d3-4d02-b4f9-690cffcb48b9","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0001: send [2,"7d72bc4a-c0e0-48f2-a698-3e139c76ab52","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0002: send [2,"a20c7362-c81d-4133-9a93-696d771c7010","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0003: send [2,"3e8c591a-2ce3-4588-9f0c-b63500c5e1a8","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0004: send [2,"8c290f62-7da6-49fd-8c05-3384c8a98f14","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0005: receive message [3,"676616a0-61d3-4d02-b4f9-690cffcb48b9",{"currentTime":"2026-03-11T17:33:01.918221+00:00"}]
+INFO:ocpp:PY-SIM-0001: receive message [3,"7d72bc4a-c0e0-48f2-a698-3e139c76ab52",{"currentTime":"2026-03-11T17:33:01.919172+00:00"}]
+INFO:protocol_station:PY-SIM-0005: Heartbeat -> Heartbeat(current_time='2026-03-11T17:33:01.918221+00:00')
+INFO:ocpp:PY-SIM-0002: receive message [3,"a20c7362-c81d-4133-9a93-696d771c7010",{"currentTime":"2026-03-11T17:33:01.921275+00:00"}]
+INFO:ocpp:PY-SIM-0003: receive message [3,"3e8c591a-2ce3-4588-9f0c-b63500c5e1a8",{"currentTime":"2026-03-11T17:33:01.921397+00:00"}]
+INFO:ocpp:PY-SIM-0004: receive message [3,"8c290f62-7da6-49fd-8c05-3384c8a98f14",{"currentTime":"2026-03-11T17:33:01.921736+00:00"}]
+INFO:protocol_station:PY-SIM-0001: Heartbeat -> Heartbeat(current_time='2026-03-11T17:33:01.919172+00:00')
+INFO:protocol_station:PY-SIM-0002: Heartbeat -> Heartbeat(current_time='2026-03-11T17:33:01.921275+00:00')
+INFO:protocol_station:PY-SIM-0003: Heartbeat -> Heartbeat(current_time='2026-03-11T17:33:01.921397+00:00')
+INFO:protocol_station:PY-SIM-0004: Heartbeat -> Heartbeat(current_time='2026-03-11T17:33:01.921736+00:00')
+INFO:ocpp:PY-SIM-0005: send [2,"69464d37-49b3-4c86-af90-16a6af69737b","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0001: send [2,"fee8b618-6102-4a10-84de-5bc2c2fc2dba","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0002: send [2,"a07cf587-404c-4204-87bd-2d8a656ef93c","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0003: send [2,"e1cb6b24-d46b-49ac-8b9f-9b15d9d2bff7","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0004: send [2,"117ba3c8-5a2d-439e-bace-e6e2f1d67124","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0005: receive message [3,"69464d37-49b3-4c86-af90-16a6af69737b",{"currentTime":"2026-03-11T17:34:01.933117+00:00"}]
+INFO:ocpp:PY-SIM-0001: receive message [3,"fee8b618-6102-4a10-84de-5bc2c2fc2dba",{"currentTime":"2026-03-11T17:34:01.933778+00:00"}]
+INFO:ocpp:PY-SIM-0002: receive message [3,"a07cf587-404c-4204-87bd-2d8a656ef93c",{"currentTime":"2026-03-11T17:34:01.933951+00:00"}]
+INFO:ocpp:PY-SIM-0003: receive message [3,"e1cb6b24-d46b-49ac-8b9f-9b15d9d2bff7",{"currentTime":"2026-03-11T17:34:01.934392+00:00"}]
+INFO:protocol_station:PY-SIM-0005: Heartbeat -> Heartbeat(current_time='2026-03-11T17:34:01.933117+00:00')
+INFO:ocpp:PY-SIM-0004: receive message [3,"117ba3c8-5a2d-439e-bace-e6e2f1d67124",{"currentTime":"2026-03-11T17:34:01.934474+00:00"}]
+INFO:protocol_station:PY-SIM-0001: Heartbeat -> Heartbeat(current_time='2026-03-11T17:34:01.933778+00:00')
+INFO:protocol_station:PY-SIM-0002: Heartbeat -> Heartbeat(current_time='2026-03-11T17:34:01.933951+00:00')
+INFO:protocol_station:PY-SIM-0003: Heartbeat -> Heartbeat(current_time='2026-03-11T17:34:01.934392+00:00')
+INFO:protocol_station:PY-SIM-0004: Heartbeat -> Heartbeat(current_time='2026-03-11T17:34:01.934474+00:00')
+INFO:ocpp:PY-SIM-0005: send [2,"a098464c-7911-4214-8d18-064e67a5fb77","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0001: send [2,"bc893538-6209-44e2-812a-b36387feccef","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0002: send [2,"21ae06a6-a177-405a-a3df-1ef383f3ce0d","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0003: send [2,"52d99004-572d-41ef-9715-051e2985b042","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0004: send [2,"47fe0cba-9f19-4efb-9dc9-1e6118742bc7","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0005: receive message [3,"a098464c-7911-4214-8d18-064e67a5fb77",{"currentTime":"2026-03-11T17:35:01.941888+00:00"}]
+INFO:protocol_station:PY-SIM-0005: Heartbeat -> Heartbeat(current_time='2026-03-11T17:35:01.941888+00:00')
+INFO:ocpp:PY-SIM-0001: receive message [3,"bc893538-6209-44e2-812a-b36387feccef",{"currentTime":"2026-03-11T17:35:01.942451+00:00"}]
+INFO:ocpp:PY-SIM-0002: receive message [3,"21ae06a6-a177-405a-a3df-1ef383f3ce0d",{"currentTime":"2026-03-11T17:35:01.942791+00:00"}]
+INFO:ocpp:PY-SIM-0003: receive message [3,"52d99004-572d-41ef-9715-051e2985b042",{"currentTime":"2026-03-11T17:35:01.942913+00:00"}]
+INFO:ocpp:PY-SIM-0004: receive message [3,"47fe0cba-9f19-4efb-9dc9-1e6118742bc7",{"currentTime":"2026-03-11T17:35:01.942975+00:00"}]
+INFO:protocol_station:PY-SIM-0001: Heartbeat -> Heartbeat(current_time='2026-03-11T17:35:01.942451+00:00')
+INFO:protocol_station:PY-SIM-0002: Heartbeat -> Heartbeat(current_time='2026-03-11T17:35:01.942791+00:00')
+INFO:protocol_station:PY-SIM-0003: Heartbeat -> Heartbeat(current_time='2026-03-11T17:35:01.942913+00:00')
+INFO:protocol_station:PY-SIM-0004: Heartbeat -> Heartbeat(current_time='2026-03-11T17:35:01.942975+00:00')
+INFO:protocol_station:PY-SIM-0001: cancellation requested, shutting down.
+INFO:protocol_station:PY-SIM-0002: cancellation requested, shutting down.
+INFO:protocol_station:PY-SIM-0003: cancellation requested, shutting down.
+INFO:protocol_station:PY-SIM-0004: cancellation requested, shutting down.
+INFO:protocol_station:PY-SIM-0005: cancellation requested, shutting down.
+INFO:     127.0.0.1:52697 - "POST /stations/scale HTTP/1.1" 200 OK
+INFO:charging_profile_manager:ChargingProfileManager initialized
+INFO:protocol_station:PY-SIM-0001: Auto transactions disabled; replay engine must drive charging
+INFO:charging_profile_manager:ChargingProfileManager initialized
+INFO:charging_profile_manager:ChargingProfileManager initialized
+INFO:protocol_station:PY-SIM-0003: Auto transactions disabled; replay engine must drive charging
+INFO:protocol_station:PY-SIM-0002: Auto transactions disabled; replay engine must drive charging
+INFO:ocpp:PY-SIM-0001: send [2,"2041775e-b270-4d0f-8531-27372d46cd4f","BootNotification",{"chargePointModel":"PythonSim-Model","chargePointVendor":"PythonSim-Vendor"}]
+INFO:charging_profile_manager:ChargingProfileManager initialized
+INFO:charging_profile_manager:ChargingProfileManager initialized
+INFO:protocol_station:PY-SIM-0004: Auto transactions disabled; replay engine must drive charging
+INFO:protocol_station:PY-SIM-0005: Auto transactions disabled; replay engine must drive charging
+INFO:ocpp:PY-SIM-0003: send [2,"e75a9f84-0827-467d-b7f1-72316eb6219c","BootNotification",{"chargePointModel":"PythonSim-Model","chargePointVendor":"PythonSim-Vendor"}]
+INFO:ocpp:PY-SIM-0002: send [2,"6c086760-f6a0-4eaa-88bc-cc11014117d8","BootNotification",{"chargePointModel":"PythonSim-Model","chargePointVendor":"PythonSim-Vendor"}]
+INFO:ocpp:PY-SIM-0004: send [2,"6427fd01-1e45-4dcb-993c-85284bea4a85","BootNotification",{"chargePointModel":"PythonSim-Model","chargePointVendor":"PythonSim-Vendor"}]
+INFO:ocpp:PY-SIM-0005: send [2,"3c91e79a-db07-42e2-a784-86b73356c1f4","BootNotification",{"chargePointModel":"PythonSim-Model","chargePointVendor":"PythonSim-Vendor"}]
+INFO:ocpp:PY-SIM-0001: receive message [3,"2041775e-b270-4d0f-8531-27372d46cd4f",{"currentTime":"2026-03-11T17:35:20.930289+00:00","interval":60,"status":"Accepted"}]
+INFO:ocpp:PY-SIM-0003: receive message [3,"e75a9f84-0827-467d-b7f1-72316eb6219c",{"currentTime":"2026-03-11T17:35:20.932100+00:00","interval":60,"status":"Accepted"}]
+INFO:protocol_station:PY-SIM-0001: BootNotification response: BootNotification(current_time='2026-03-11T17:35:20.930289+00:00', interval=60, status='Accepted')
+INFO:ocpp:PY-SIM-0002: receive message [3,"6c086760-f6a0-4eaa-88bc-cc11014117d8",{"currentTime":"2026-03-11T17:35:20.932548+00:00","interval":60,"status":"Accepted"}]
+INFO:ocpp:PY-SIM-0004: receive message [3,"6427fd01-1e45-4dcb-993c-85284bea4a85",{"currentTime":"2026-03-11T17:35:20.932678+00:00","interval":60,"status":"Accepted"}]
+INFO:ocpp:PY-SIM-0005: receive message [3,"3c91e79a-db07-42e2-a784-86b73356c1f4",{"currentTime":"2026-03-11T17:35:20.933071+00:00","interval":60,"status":"Accepted"}]
+INFO:ocpp:PY-SIM-0001: send [2,"65b2fb33-dc2c-4d91-b9c4-4248c0abbd69","StatusNotification",{"connectorId":1,"errorCode":"NoError","status":"Available","timestamp":"2026-03-11T17:35:20.933868+00:00"}]
+INFO:protocol_station:PY-SIM-0003: BootNotification response: BootNotification(current_time='2026-03-11T17:35:20.932100+00:00', interval=60, status='Accepted')
+INFO:protocol_station:PY-SIM-0002: BootNotification response: BootNotification(current_time='2026-03-11T17:35:20.932548+00:00', interval=60, status='Accepted')
+INFO:protocol_station:PY-SIM-0004: BootNotification response: BootNotification(current_time='2026-03-11T17:35:20.932678+00:00', interval=60, status='Accepted')
+INFO:protocol_station:PY-SIM-0005: BootNotification response: BootNotification(current_time='2026-03-11T17:35:20.933071+00:00', interval=60, status='Accepted')
+INFO:ocpp:PY-SIM-0003: send [2,"48378d21-5cbb-4980-a36f-ea94afb443fe","StatusNotification",{"connectorId":1,"errorCode":"NoError","status":"Available","timestamp":"2026-03-11T17:35:20.935453+00:00"}]
+INFO:ocpp:PY-SIM-0001: receive message [3,"65b2fb33-dc2c-4d91-b9c4-4248c0abbd69",{}]
+INFO:ocpp:PY-SIM-0002: send [2,"b1b6a8f3-d1fe-43c2-ba96-5ffa71f19ae7","StatusNotification",{"connectorId":1,"errorCode":"NoError","status":"Available","timestamp":"2026-03-11T17:35:20.935775+00:00"}]
+INFO:ocpp:PY-SIM-0004: send [2,"bac6a7e2-4cb2-42cb-a98a-3c50efa8da8a","StatusNotification",{"connectorId":1,"errorCode":"NoError","status":"Available","timestamp":"2026-03-11T17:35:20.935901+00:00"}]
+INFO:ocpp:PY-SIM-0005: send [2,"a62f81bb-cc06-40c4-8412-7be5005ab3d8","StatusNotification",{"connectorId":1,"errorCode":"NoError","status":"Available","timestamp":"2026-03-11T17:35:20.936012+00:00"}]
+INFO:protocol_station:PY-SIM-0001: StatusNotification -> StatusNotification()
+INFO:ocpp:PY-SIM-0003: receive message [3,"48378d21-5cbb-4980-a36f-ea94afb443fe",{}]
+INFO:protocol_station:PY-SIM-0003: StatusNotification -> StatusNotification()
+INFO:ocpp:PY-SIM-0002: receive message [3,"b1b6a8f3-d1fe-43c2-ba96-5ffa71f19ae7",{}]
+INFO:ocpp:PY-SIM-0004: receive message [3,"bac6a7e2-4cb2-42cb-a98a-3c50efa8da8a",{}]
+INFO:ocpp:PY-SIM-0005: receive message [3,"a62f81bb-cc06-40c4-8412-7be5005ab3d8",{}]
+INFO:protocol_station:PY-SIM-0002: StatusNotification -> StatusNotification()
+INFO:protocol_station:PY-SIM-0004: StatusNotification -> StatusNotification()
+INFO:protocol_station:PY-SIM-0005: StatusNotification -> StatusNotification()
+INFO:     127.0.0.1:52697 - "GET /stations/state HTTP/1.1" 200 OK
+INFO:ocpp:PY-SIM-0001: send [2,"a11e6b85-b358-4b08-9112-a135a2d795dd","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0003: send [2,"2749ace4-cf63-4fa4-9308-e66a514c2668","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0002: send [2,"7d6993fa-6049-48ba-ba3f-14b81aa10e40","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0004: send [2,"43f4b4cf-6ac5-4b54-bf02-ede93d3ff54c","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0005: send [2,"314c21f1-42ba-4277-9b1c-e8ba324a8e92","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0001: receive message [3,"a11e6b85-b358-4b08-9112-a135a2d795dd",{"currentTime":"2026-03-11T17:36:20.925730+00:00"}]
+INFO:ocpp:PY-SIM-0003: receive message [3,"2749ace4-cf63-4fa4-9308-e66a514c2668",{"currentTime":"2026-03-11T17:36:20.926270+00:00"}]
+INFO:ocpp:PY-SIM-0002: receive message [3,"7d6993fa-6049-48ba-ba3f-14b81aa10e40",{"currentTime":"2026-03-11T17:36:20.926344+00:00"}]
+INFO:ocpp:PY-SIM-0004: receive message [3,"43f4b4cf-6ac5-4b54-bf02-ede93d3ff54c",{"currentTime":"2026-03-11T17:36:20.926419+00:00"}]
+INFO:ocpp:PY-SIM-0005: receive message [3,"314c21f1-42ba-4277-9b1c-e8ba324a8e92",{"currentTime":"2026-03-11T17:36:20.926468+00:00"}]
+INFO:protocol_station:PY-SIM-0001: Heartbeat -> Heartbeat(current_time='2026-03-11T17:36:20.925730+00:00')
+INFO:protocol_station:PY-SIM-0003: Heartbeat -> Heartbeat(current_time='2026-03-11T17:36:20.926270+00:00')
+INFO:protocol_station:PY-SIM-0002: Heartbeat -> Heartbeat(current_time='2026-03-11T17:36:20.926344+00:00')
+INFO:protocol_station:PY-SIM-0004: Heartbeat -> Heartbeat(current_time='2026-03-11T17:36:20.926419+00:00')
+INFO:protocol_station:PY-SIM-0005: Heartbeat -> Heartbeat(current_time='2026-03-11T17:36:20.926468+00:00')
+INFO:ocpp:PY-SIM-0001: send [2,"4469e41f-441f-471b-bd00-1544583a5f91","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0003: send [2,"737825ae-51a3-4023-9c75-faf423b618f2","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0002: send [2,"a559c6c6-60b6-4e9a-b8d4-71f413a0ef16","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0004: send [2,"cf646835-e2c6-4ee3-a175-569ec89f5bea","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0005: send [2,"eb9f281e-b62c-414b-b037-05e81f97a0e4","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0001: receive message [3,"4469e41f-441f-471b-bd00-1544583a5f91",{"currentTime":"2026-03-11T17:37:20.928815+00:00"}]
+INFO:protocol_station:PY-SIM-0001: Heartbeat -> Heartbeat(current_time='2026-03-11T17:37:20.928815+00:00')
+INFO:ocpp:PY-SIM-0003: receive message [3,"737825ae-51a3-4023-9c75-faf423b618f2",{"currentTime":"2026-03-11T17:37:20.930580+00:00"}]
+INFO:ocpp:PY-SIM-0002: receive message [3,"a559c6c6-60b6-4e9a-b8d4-71f413a0ef16",{"currentTime":"2026-03-11T17:37:20.930733+00:00"}]
+INFO:ocpp:PY-SIM-0004: receive message [3,"cf646835-e2c6-4ee3-a175-569ec89f5bea",{"currentTime":"2026-03-11T17:37:20.930897+00:00"}]
+INFO:ocpp:PY-SIM-0005: receive message [3,"eb9f281e-b62c-414b-b037-05e81f97a0e4",{"currentTime":"2026-03-11T17:37:20.931046+00:00"}]
+INFO:protocol_station:PY-SIM-0003: Heartbeat -> Heartbeat(current_time='2026-03-11T17:37:20.930580+00:00')
+INFO:protocol_station:PY-SIM-0002: Heartbeat -> Heartbeat(current_time='2026-03-11T17:37:20.930733+00:00')
+INFO:protocol_station:PY-SIM-0004: Heartbeat -> Heartbeat(current_time='2026-03-11T17:37:20.930897+00:00')
+INFO:protocol_station:PY-SIM-0005: Heartbeat -> Heartbeat(current_time='2026-03-11T17:37:20.931046+00:00')
+INFO:ocpp:PY-SIM-0001: send [2,"4bae1670-2218-4c53-8cd5-055e30d675ee","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0003: send [2,"59628e06-6d44-439a-aa7f-e567fcad2778","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0002: send [2,"bd276081-e321-4954-8fab-8eb711c23588","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0004: send [2,"da4c1f9b-54d6-48f8-b350-be10034d0ab6","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0001: receive message [3,"4bae1670-2218-4c53-8cd5-055e30d675ee",{"currentTime":"2026-03-11T17:38:20.931787+00:00"}]
+INFO:ocpp:PY-SIM-0005: send [2,"f56243c8-f417-4b70-b2c4-dfc85e449253","Heartbeat",{}]
+INFO:protocol_station:PY-SIM-0001: Heartbeat -> Heartbeat(current_time='2026-03-11T17:38:20.931787+00:00')
+INFO:ocpp:PY-SIM-0003: receive message [3,"59628e06-6d44-439a-aa7f-e567fcad2778",{"currentTime":"2026-03-11T17:38:20.932989+00:00"}]
+INFO:protocol_station:PY-SIM-0003: Heartbeat -> Heartbeat(current_time='2026-03-11T17:38:20.932989+00:00')
+INFO:ocpp:PY-SIM-0002: receive message [3,"bd276081-e321-4954-8fab-8eb711c23588",{"currentTime":"2026-03-11T17:38:20.933896+00:00"}]
+INFO:protocol_station:PY-SIM-0002: Heartbeat -> Heartbeat(current_time='2026-03-11T17:38:20.933896+00:00')
+INFO:ocpp:PY-SIM-0004: receive message [3,"da4c1f9b-54d6-48f8-b350-be10034d0ab6",{"currentTime":"2026-03-11T17:38:20.934460+00:00"}]
+INFO:ocpp:PY-SIM-0005: receive message [3,"f56243c8-f417-4b70-b2c4-dfc85e449253",{"currentTime":"2026-03-11T17:38:20.934943+00:00"}]
+INFO:protocol_station:PY-SIM-0004: Heartbeat -> Heartbeat(current_time='2026-03-11T17:38:20.934460+00:00')
+INFO:protocol_station:PY-SIM-0005: Heartbeat -> Heartbeat(current_time='2026-03-11T17:38:20.934943+00:00')
+INFO:ocpp:PY-SIM-0001: send [2,"97e19cd8-444f-43bb-b61b-045eeaa4f3eb","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0003: send [2,"9a7a6163-b691-4f3a-979e-4e9943b7affd","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0002: send [2,"e1ea1aeb-8647-4dc2-97d5-5d0a149bc326","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0004: send [2,"25b171d9-0ce1-4f3c-801c-8a1f139a7264","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0005: send [2,"0b82d0c8-23cc-4b76-a7ba-3d495a9b7970","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0001: receive message [3,"97e19cd8-444f-43bb-b61b-045eeaa4f3eb",{"currentTime":"2026-03-11T17:39:20.934946+00:00"}]
+INFO:protocol_station:PY-SIM-0001: Heartbeat -> Heartbeat(current_time='2026-03-11T17:39:20.934946+00:00')
+INFO:ocpp:PY-SIM-0003: receive message [3,"9a7a6163-b691-4f3a-979e-4e9943b7affd",{"currentTime":"2026-03-11T17:39:20.936054+00:00"}]
+INFO:protocol_station:PY-SIM-0003: Heartbeat -> Heartbeat(current_time='2026-03-11T17:39:20.936054+00:00')
+INFO:ocpp:PY-SIM-0002: receive message [3,"e1ea1aeb-8647-4dc2-97d5-5d0a149bc326",{"currentTime":"2026-03-11T17:39:20.937225+00:00"}]
+INFO:ocpp:PY-SIM-0004: receive message [3,"25b171d9-0ce1-4f3c-801c-8a1f139a7264",{"currentTime":"2026-03-11T17:39:20.937368+00:00"}]
+INFO:ocpp:PY-SIM-0005: receive message [3,"0b82d0c8-23cc-4b76-a7ba-3d495a9b7970",{"currentTime":"2026-03-11T17:39:20.937857+00:00"}]
+INFO:protocol_station:PY-SIM-0002: Heartbeat -> Heartbeat(current_time='2026-03-11T17:39:20.937225+00:00')
+INFO:protocol_station:PY-SIM-0004: Heartbeat -> Heartbeat(current_time='2026-03-11T17:39:20.937368+00:00')
+INFO:protocol_station:PY-SIM-0005: Heartbeat -> Heartbeat(current_time='2026-03-11T17:39:20.937857+00:00')
+INFO:ocpp:PY-SIM-0001: send [2,"c7606590-0cb8-4e7d-af05-9dd6bd7ecd33","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0003: send [2,"d7cc33f7-a807-4241-854e-203d70420f35","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0002: send [2,"21413338-6cdc-4f15-948a-5ee38a64f913","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0004: send [2,"13da734a-be61-4fb4-b082-f6c61c391a33","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0005: send [2,"ea6827be-c96c-4d5c-b3fe-0d7cb117995c","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0001: receive message [3,"c7606590-0cb8-4e7d-af05-9dd6bd7ecd33",{"currentTime":"2026-03-11T17:40:20.938966+00:00"}]
+INFO:ocpp:PY-SIM-0003: receive message [3,"d7cc33f7-a807-4241-854e-203d70420f35",{"currentTime":"2026-03-11T17:40:20.939299+00:00"}]
+INFO:protocol_station:PY-SIM-0001: Heartbeat -> Heartbeat(current_time='2026-03-11T17:40:20.938966+00:00')
+INFO:protocol_station:PY-SIM-0003: Heartbeat -> Heartbeat(current_time='2026-03-11T17:40:20.939299+00:00')
+INFO:ocpp:PY-SIM-0002: receive message [3,"21413338-6cdc-4f15-948a-5ee38a64f913",{"currentTime":"2026-03-11T17:40:20.941004+00:00"}]
+INFO:ocpp:PY-SIM-0004: receive message [3,"13da734a-be61-4fb4-b082-f6c61c391a33",{"currentTime":"2026-03-11T17:40:20.941193+00:00"}]
+INFO:ocpp:PY-SIM-0005: receive message [3,"ea6827be-c96c-4d5c-b3fe-0d7cb117995c",{"currentTime":"2026-03-11T17:40:20.941659+00:00"}]
+INFO:protocol_station:PY-SIM-0002: Heartbeat -> Heartbeat(current_time='2026-03-11T17:40:20.941004+00:00')
+INFO:protocol_station:PY-SIM-0004: Heartbeat -> Heartbeat(current_time='2026-03-11T17:40:20.941193+00:00')
+INFO:protocol_station:PY-SIM-0005: Heartbeat -> Heartbeat(current_time='2026-03-11T17:40:20.941659+00:00')
+INFO:ocpp:PY-SIM-0001: send [2,"b68113ac-3918-4989-91a7-853891ba0222","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0003: send [2,"9d72fbcc-6c51-42c2-8e9f-2afee20fd36b","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0002: send [2,"cd915186-4f82-4d92-bc27-4734a324a564","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0004: send [2,"e283a015-ec9d-4396-b9a2-d9b818a970f1","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0005: send [2,"80cffa17-7b4e-483d-9393-200ff2ccc4c0","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0001: receive message [3,"b68113ac-3918-4989-91a7-853891ba0222",{"currentTime":"2026-03-11T17:41:20.947255+00:00"}]
+INFO:protocol_station:PY-SIM-0001: Heartbeat -> Heartbeat(current_time='2026-03-11T17:41:20.947255+00:00')
+INFO:ocpp:PY-SIM-0003: receive message [3,"9d72fbcc-6c51-42c2-8e9f-2afee20fd36b",{"currentTime":"2026-03-11T17:41:20.947825+00:00"}]
+INFO:protocol_station:PY-SIM-0003: Heartbeat -> Heartbeat(current_time='2026-03-11T17:41:20.947825+00:00')
+INFO:ocpp:PY-SIM-0002: receive message [3,"cd915186-4f82-4d92-bc27-4734a324a564",{"currentTime":"2026-03-11T17:41:20.949232+00:00"}]
+INFO:ocpp:PY-SIM-0004: receive message [3,"e283a015-ec9d-4396-b9a2-d9b818a970f1",{"currentTime":"2026-03-11T17:41:20.949423+00:00"}]
+INFO:ocpp:PY-SIM-0005: receive message [3,"80cffa17-7b4e-483d-9393-200ff2ccc4c0",{"currentTime":"2026-03-11T17:41:20.949588+00:00"}]
+INFO:protocol_station:PY-SIM-0002: Heartbeat -> Heartbeat(current_time='2026-03-11T17:41:20.949232+00:00')
+INFO:protocol_station:PY-SIM-0004: Heartbeat -> Heartbeat(current_time='2026-03-11T17:41:20.949423+00:00')
+INFO:protocol_station:PY-SIM-0005: Heartbeat -> Heartbeat(current_time='2026-03-11T17:41:20.949588+00:00')
+INFO:ocpp:PY-SIM-0001: send [2,"430f62b0-4146-4b9c-8959-67400eb0dfc4","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0003: send [2,"b640d134-0d38-444e-a026-622dc05d6108","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0002: send [2,"98281020-ec15-4eed-8edf-110afc514f77","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0004: send [2,"c8f636b4-98f2-457a-bd7e-ed6a64b77cc4","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0005: send [2,"48a2eb40-db9a-43a5-80ff-8c4761327618","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0001: receive message [3,"430f62b0-4146-4b9c-8959-67400eb0dfc4",{"currentTime":"2026-03-11T17:42:20.957235+00:00"}]
+INFO:protocol_station:PY-SIM-0001: Heartbeat -> Heartbeat(current_time='2026-03-11T17:42:20.957235+00:00')
+INFO:ocpp:PY-SIM-0003: receive message [3,"b640d134-0d38-444e-a026-622dc05d6108",{"currentTime":"2026-03-11T17:42:20.958296+00:00"}]
+INFO:ocpp:PY-SIM-0002: receive message [3,"98281020-ec15-4eed-8edf-110afc514f77",{"currentTime":"2026-03-11T17:42:20.958684+00:00"}]
+INFO:ocpp:PY-SIM-0004: receive message [3,"c8f636b4-98f2-457a-bd7e-ed6a64b77cc4",{"currentTime":"2026-03-11T17:42:20.958929+00:00"}]
+INFO:ocpp:PY-SIM-0005: receive message [3,"48a2eb40-db9a-43a5-80ff-8c4761327618",{"currentTime":"2026-03-11T17:42:20.959050+00:00"}]
+INFO:protocol_station:PY-SIM-0003: Heartbeat -> Heartbeat(current_time='2026-03-11T17:42:20.958296+00:00')
+INFO:protocol_station:PY-SIM-0002: Heartbeat -> Heartbeat(current_time='2026-03-11T17:42:20.958684+00:00')
+INFO:protocol_station:PY-SIM-0004: Heartbeat -> Heartbeat(current_time='2026-03-11T17:42:20.958929+00:00')
+INFO:protocol_station:PY-SIM-0005: Heartbeat -> Heartbeat(current_time='2026-03-11T17:42:20.959050+00:00')
+INFO:ocpp:PY-SIM-0001: send [2,"02d062ad-0cb4-46b9-9981-bd1a78967030","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0003: send [2,"d775491f-c96c-41d1-aa16-b4acd0f46d84","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0002: send [2,"97a0bb5f-1ffb-4ad6-97ec-ef4e884b3f6b","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0004: send [2,"ead8a31a-6d3c-4ee6-9a4e-a8f5ef6db763","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0005: send [2,"705edda7-96a8-4332-841e-ffceb7630aa4","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0001: receive message [3,"02d062ad-0cb4-46b9-9981-bd1a78967030",{"currentTime":"2026-03-11T17:43:20.961701+00:00"}]
+INFO:protocol_station:PY-SIM-0001: Heartbeat -> Heartbeat(current_time='2026-03-11T17:43:20.961701+00:00')
+INFO:ocpp:PY-SIM-0003: receive message [3,"d775491f-c96c-41d1-aa16-b4acd0f46d84",{"currentTime":"2026-03-11T17:43:20.963251+00:00"}]
+INFO:ocpp:PY-SIM-0002: receive message [3,"97a0bb5f-1ffb-4ad6-97ec-ef4e884b3f6b",{"currentTime":"2026-03-11T17:43:20.963504+00:00"}]
+INFO:ocpp:PY-SIM-0004: receive message [3,"ead8a31a-6d3c-4ee6-9a4e-a8f5ef6db763",{"currentTime":"2026-03-11T17:43:20.963654+00:00"}]
+INFO:ocpp:PY-SIM-0005: receive message [3,"705edda7-96a8-4332-841e-ffceb7630aa4",{"currentTime":"2026-03-11T17:43:20.963791+00:00"}]
+INFO:protocol_station:PY-SIM-0003: Heartbeat -> Heartbeat(current_time='2026-03-11T17:43:20.963251+00:00')
+INFO:protocol_station:PY-SIM-0002: Heartbeat -> Heartbeat(current_time='2026-03-11T17:43:20.963504+00:00')
+INFO:protocol_station:PY-SIM-0004: Heartbeat -> Heartbeat(current_time='2026-03-11T17:43:20.963654+00:00')
+INFO:protocol_station:PY-SIM-0005: Heartbeat -> Heartbeat(current_time='2026-03-11T17:43:20.963791+00:00')
+INFO:ocpp:PY-SIM-0001: send [2,"36052b8d-eff4-4e9a-8599-8ca750fa45ea","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0003: send [2,"186a1d34-4c10-476e-92cf-89af70db8838","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0002: send [2,"52155b79-017c-4df8-96be-060138607605","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0001: receive message [3,"36052b8d-eff4-4e9a-8599-8ca750fa45ea",{"currentTime":"2026-03-11T17:44:20.964956+00:00"}]
+INFO:ocpp:PY-SIM-0004: send [2,"c27c7e7a-ad57-4c85-a568-5f65245c6064","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0005: send [2,"23401562-c6b0-4b1c-8481-66f1b3bde813","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0003: receive message [3,"186a1d34-4c10-476e-92cf-89af70db8838",{"currentTime":"2026-03-11T17:44:20.965949+00:00"}]
+INFO:protocol_station:PY-SIM-0001: Heartbeat -> Heartbeat(current_time='2026-03-11T17:44:20.964956+00:00')
+INFO:protocol_station:PY-SIM-0003: Heartbeat -> Heartbeat(current_time='2026-03-11T17:44:20.965949+00:00')
+INFO:ocpp:PY-SIM-0002: receive message [3,"52155b79-017c-4df8-96be-060138607605",{"currentTime":"2026-03-11T17:44:20.966558+00:00"}]
+INFO:protocol_station:PY-SIM-0002: Heartbeat -> Heartbeat(current_time='2026-03-11T17:44:20.966558+00:00')
+INFO:ocpp:PY-SIM-0004: receive message [3,"c27c7e7a-ad57-4c85-a568-5f65245c6064",{"currentTime":"2026-03-11T17:44:20.967283+00:00"}]
+INFO:ocpp:PY-SIM-0005: receive message [3,"23401562-c6b0-4b1c-8481-66f1b3bde813",{"currentTime":"2026-03-11T17:44:20.967602+00:00"}]
+INFO:protocol_station:PY-SIM-0004: Heartbeat -> Heartbeat(current_time='2026-03-11T17:44:20.967283+00:00')
+INFO:protocol_station:PY-SIM-0005: Heartbeat -> Heartbeat(current_time='2026-03-11T17:44:20.967602+00:00')
+INFO:ocpp:PY-SIM-0001: send [2,"0e7d27e2-85fd-411f-bf00-83ab253388da","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0003: send [2,"4b2a17ba-edd0-4904-9c97-31428b9b87ab","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0002: send [2,"f196fdfd-7f8c-4dd0-a792-f0cfffea62cc","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0004: send [2,"eb2982fb-a6d7-4905-ba8e-da229b418ea0","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0005: send [2,"d4965e5b-afd0-4cc1-8281-ec3e8d232617","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0001: receive message [3,"0e7d27e2-85fd-411f-bf00-83ab253388da",{"currentTime":"2026-03-11T17:45:20.969146+00:00"}]
+INFO:protocol_station:PY-SIM-0001: Heartbeat -> Heartbeat(current_time='2026-03-11T17:45:20.969146+00:00')
+INFO:ocpp:PY-SIM-0003: receive message [3,"4b2a17ba-edd0-4904-9c97-31428b9b87ab",{"currentTime":"2026-03-11T17:45:20.970708+00:00"}]
+INFO:protocol_station:PY-SIM-0003: Heartbeat -> Heartbeat(current_time='2026-03-11T17:45:20.970708+00:00')
+INFO:ocpp:PY-SIM-0002: receive message [3,"f196fdfd-7f8c-4dd0-a792-f0cfffea62cc",{"currentTime":"2026-03-11T17:45:20.970968+00:00"}]
+INFO:ocpp:PY-SIM-0004: receive message [3,"eb2982fb-a6d7-4905-ba8e-da229b418ea0",{"currentTime":"2026-03-11T17:45:20.971139+00:00"}]
+INFO:ocpp:PY-SIM-0005: receive message [3,"d4965e5b-afd0-4cc1-8281-ec3e8d232617",{"currentTime":"2026-03-11T17:45:20.971774+00:00"}]
+INFO:protocol_station:PY-SIM-0002: Heartbeat -> Heartbeat(current_time='2026-03-11T17:45:20.970968+00:00')
+INFO:protocol_station:PY-SIM-0004: Heartbeat -> Heartbeat(current_time='2026-03-11T17:45:20.971139+00:00')
+INFO:protocol_station:PY-SIM-0005: Heartbeat -> Heartbeat(current_time='2026-03-11T17:45:20.971774+00:00')
+INFO:ocpp:PY-SIM-0001: send [2,"b8b4a6e3-1505-428e-89b6-25d06cb89c6d","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0003: send [2,"764bd1b3-d986-4f09-98e1-5665f63ce0ce","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0002: send [2,"3f4c5fe8-8071-412b-a191-9724f211bbaa","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0004: send [2,"0b7a5148-3fdf-4b68-84b4-4ede0c2282a9","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0005: send [2,"1b3217ea-96e8-49b5-aa1f-9f38194e232c","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0001: receive message [3,"b8b4a6e3-1505-428e-89b6-25d06cb89c6d",{"currentTime":"2026-03-11T17:48:07.979022+00:00"}]
+INFO:ocpp:PY-SIM-0003: receive message [3,"764bd1b3-d986-4f09-98e1-5665f63ce0ce",{"currentTime":"2026-03-11T17:48:07.979504+00:00"}]
+INFO:ocpp:PY-SIM-0002: receive message [3,"3f4c5fe8-8071-412b-a191-9724f211bbaa",{"currentTime":"2026-03-11T17:48:07.979683+00:00"}]
+INFO:ocpp:PY-SIM-0004: receive message [3,"0b7a5148-3fdf-4b68-84b4-4ede0c2282a9",{"currentTime":"2026-03-11T17:48:07.979822+00:00"}]
+INFO:ocpp:PY-SIM-0005: receive message [3,"1b3217ea-96e8-49b5-aa1f-9f38194e232c",{"currentTime":"2026-03-11T17:48:07.979918+00:00"}]
+INFO:protocol_station:PY-SIM-0001: Heartbeat -> Heartbeat(current_time='2026-03-11T17:48:07.979022+00:00')
+INFO:protocol_station:PY-SIM-0003: Heartbeat -> Heartbeat(current_time='2026-03-11T17:48:07.979504+00:00')
+INFO:protocol_station:PY-SIM-0002: Heartbeat -> Heartbeat(current_time='2026-03-11T17:48:07.979683+00:00')
+INFO:protocol_station:PY-SIM-0004: Heartbeat -> Heartbeat(current_time='2026-03-11T17:48:07.979822+00:00')
+INFO:protocol_station:PY-SIM-0005: Heartbeat -> Heartbeat(current_time='2026-03-11T17:48:07.979918+00:00')
+INFO:ocpp:PY-SIM-0001: send [2,"d19e0105-c7c7-4c9b-a5fd-7cf2cbb29265","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0003: send [2,"c3424d20-5d5a-4a1d-99b9-40f572933d4b","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0002: send [2,"6219503f-106c-4578-bc4a-96484bc5453a","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0004: send [2,"07942f9e-af45-426a-b79e-1305cfbfa692","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0005: send [2,"385fdd0e-c1ad-46fa-9358-e4a6e974ae33","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0001: receive message [3,"d19e0105-c7c7-4c9b-a5fd-7cf2cbb29265",{"currentTime":"2026-03-11T17:49:07.993267+00:00"}]
+INFO:ocpp:PY-SIM-0003: receive message [3,"c3424d20-5d5a-4a1d-99b9-40f572933d4b",{"currentTime":"2026-03-11T17:49:07.996044+00:00"}]
+INFO:ocpp:PY-SIM-0002: receive message [3,"6219503f-106c-4578-bc4a-96484bc5453a",{"currentTime":"2026-03-11T17:49:07.996305+00:00"}]
+INFO:ocpp:PY-SIM-0004: receive message [3,"07942f9e-af45-426a-b79e-1305cfbfa692",{"currentTime":"2026-03-11T17:49:07.996625+00:00"}]
+INFO:ocpp:PY-SIM-0005: receive message [3,"385fdd0e-c1ad-46fa-9358-e4a6e974ae33",{"currentTime":"2026-03-11T17:49:08.000115+00:00"}]
+INFO:protocol_station:PY-SIM-0001: Heartbeat -> Heartbeat(current_time='2026-03-11T17:49:07.993267+00:00')
+INFO:protocol_station:PY-SIM-0003: Heartbeat -> Heartbeat(current_time='2026-03-11T17:49:07.996044+00:00')
+INFO:protocol_station:PY-SIM-0002: Heartbeat -> Heartbeat(current_time='2026-03-11T17:49:07.996305+00:00')
+INFO:protocol_station:PY-SIM-0004: Heartbeat -> Heartbeat(current_time='2026-03-11T17:49:07.996625+00:00')
+INFO:protocol_station:PY-SIM-0005: Heartbeat -> Heartbeat(current_time='2026-03-11T17:49:08.000115+00:00')
+INFO:ocpp:PY-SIM-0001: send [2,"38b9591c-6a6e-44b1-90b0-f493e4f41697","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0003: send [2,"c5790e41-0ed4-45de-9844-654e942449eb","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0002: send [2,"0433d7a6-7178-43c7-9f6a-7bd1e3eeb1e5","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0004: send [2,"2937d6d5-1001-4999-8a8e-b59efff3eb11","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0005: send [2,"d8fd7b54-d870-487d-a8a9-10b4e3abb534","Heartbeat",{}]
+INFO:ocpp:PY-SIM-0001: receive message [3,"38b9591c-6a6e-44b1-90b0-f493e4f41697",{"currentTime":"2026-03-11T17:50:08.013237+00:00"}]
+INFO:protocol_station:PY-SIM-0001: Heartbeat -> Heartbeat(current_time='2026-03-11T17:50:08.013237+00:00')
+INFO:ocpp:PY-SIM-0003: receive message [3,"c5790e41-0ed4-45de-9844-654e942449eb",{"currentTime":"2026-03-11T17:50:08.013999+00:00"}]
+INFO:ocpp:PY-SIM-0002: receive message [3,"0433d7a6-7178-43c7-9f6a-7bd1e3eeb1e5",{"currentTime":"2026-03-11T17:50:08.014360+00:00"}]
+INFO:ocpp:PY-SIM-0004: receive message [3,"2937d6d5-1001-4999-8a8e-b59efff3eb11",{"currentTime":"2026-03-11T17:50:08.014443+00:00"}]
+INFO:ocpp:PY-SIM-0005: receive message [3,"d8fd7b54-d870-487d-a8a9-10b4e3abb534",{"currentTime":"2026-03-11T17:50:08.014508+00:00"}]
+INFO:protocol_station:PY-SIM-0003: Heartbeat -> Heartbeat(current_time='2026-03-11T17:50:08.013999+00:00')
+INFO:protocol_station:PY-SIM-0002: Heartbeat -> Heartbeat(current_time='2026-03-11T17:50:08.014360+00:00')
+INFO:protocol_station:PY-SIM-0004: Heartbeat -> Heartbeat(current_time='2026-03-11T17:50:08.014443+00:00')
+INFO:protocol_station:PY-SIM-0005: Heartbeat -> Heartbeat(current_time='2026-03-11T17:50:08.014508+00:00')

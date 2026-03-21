@@ -897,10 +897,13 @@ class TestCompositeSchedule:
         """Returns None when no profiles exist."""
         manager = ChargingProfileManager()
 
+        start_time = datetime(2026, 1, 8, 10, 0, 0, tzinfo=timezone.utc)
+
         schedule = manager.get_composite_schedule(
             connector_id=1,
             duration=3600,
-            charging_rate_unit=ChargingRateUnit.WATTS
+            charging_rate_unit=ChargingRateUnit.WATTS,
+            start_time=start_time,
         )
 
         assert schedule is None
@@ -1177,6 +1180,8 @@ class TestProfileKinds:
     def test_relative_profile_excluded_without_transaction(self):
         """Relative profiles excluded from composite schedule (no transaction context)."""
         manager = ChargingProfileManager()
+
+        check_time = datetime(2026, 1, 8, 10, 0, 0, tzinfo=timezone.utc)
         
         profile = ChargingProfile(
             charging_profile_id=1,
@@ -1198,7 +1203,8 @@ class TestProfileKinds:
         schedule = manager.get_composite_schedule(
             connector_id=1,
             duration=3600,
-            charging_rate_unit=ChargingRateUnit.WATTS
+            charging_rate_unit=ChargingRateUnit.WATTS,
+            start_time=check_time,
         )
 
         assert schedule is None

@@ -19,6 +19,8 @@ Generate an API key using the admin CLI, then paste it into the dashboard’s **
 ```bash
 ./.venv/bin/python user_admin.py create --email you@example.com
 ```
+ 
+
 
 It will print:
 
@@ -26,6 +28,10 @@ It will print:
 User: you@example.com -> API Key: <YOUR_KEY>
 ```
 
+
+ wR938iwSLagoPQwVxjDBjC1v7_185J50KrjhvlRaa74
+
+ 
 
 ## Features
 
@@ -103,7 +109,7 @@ Example: An "idle" profile with `charge_if_price_below=18` won't start charging 
 
 ### 1. Clone the repository
 ```bash
-git clone https://github.com/prakashdebroy/ev_charging_sim.git
+git clone 
 cd ev_charging_sim
 ```
 
@@ -124,6 +130,13 @@ pip install -r requirements.txt
 
 
 ## Running the Simulator
+
+### Step 0: Set required CSV env vars (REAL_CSV only)
+```bash
+export REPLAY_MODE="REAL_CSV"
+export CSV_ENERGY_COLUMN="Energy Consumed"
+export CSV_ENERGY_UNIT="kwh"
+```
 
 ### Step 1: Start the CSMS backend
 ```bash
@@ -150,6 +163,58 @@ Open: **http://localhost:8000/**
 - Choose a profile
 - Scale swarm
 - Start/stop individual stations
+
+### Step 4: Replay from CSV (deterministic)
+1. Keep CSMS running on port 9000.
+2. Scale stations so `PY-SIM-XXXX` IDs match the CSV station_ids.
+3. In the dashboard, open **Replay from CSV** and set:
+    - CSV directory (or CSV files)
+    - Voltage (V)
+    - Timezone (usually `UTC`)
+4. Click **Run replay**.
+
+The replay pipeline drives `StartTransaction`, `MeterValues`, and `StopTransaction` from the CSV data and updates the UI based on those events.
+
+### Simulator modes: STRICT vs REAL_CSV (Canonical)
+
+These modes are **contracts**, not features. Mixing them is an architectural error.
+
+**STRICT (default) — CORRECTNESS**
+- Event‑based only; finite execution.
+- No clocks, loops, or physics.
+- CSV energy is exact truth; used directly for correctness validation.
+- Validation is **blocking** and fail‑fast on any mismatch.
+- Intended for tests, verification, and correctness guarantees.
+- **Baseline locked:** STRICT must never be extended with realism features.
+
+**REAL_CSV (explicit) — REALISM**
+- Time‑driven execution with live simulation.
+- Charging physics and clock‑driven progression are enabled.
+- Validation is **non‑blocking** and purely observational.
+- Intended for analysis, visualization, and exploration.
+- **NOT proof‑grade** and must not be used for correctness guarantees.
+
+**Warnings**
+- REAL_CSV is not for correctness validation.
+- STRICT must never include ChargingLoop, ReplayClock, or live UI behavior.
+
+#### Mode behavior matrix
+
+| Behavior | STRICT | REAL_CSV |
+|---|---|---|
+| Execution model | Event‑based, finite | Time‑based, continuous |
+| ChargingLoop | **Forbidden** | **Required** |
+| ReplayClock | **Forbidden** | **Required** |
+| Validation behavior | Blocking, zero‑tolerance | Non‑blocking, reported |
+| OCPP emission pattern | Discrete event sequence | Tick‑driven MeterValues |
+| UI updates | Discrete/event‑based | Live from execution metrics |
+| Intended use | Correctness verification | Realism/visualization |
+| Forbidden behaviors | Any live loops or clocks | Bypass replay orchestration |
+
+**Runtime banners**
+- STRICT logs: **RUNNING IN STRICT MODE — CORRECTNESS ONLY**
+- REAL_CSV logs: **RUNNING IN REAL_CSV MODE — REALISM / NON‑BLOCKING VALIDATION**
+- REAL_CSV also logs: **REAL_CSV MODE IS NOT FOR CORRECTNESS VALIDATION** and **RESULTS MAY DIFFER FROM STRICT MODE BY DESIGN**
 
 
 
@@ -496,6 +561,17 @@ Example scenario snippet:
      corruption_type: truncate_field
      duration: 20
 ```
+
+## CSV Energy Contract (Strict)
+
+CSV ingestion requires an explicit **kWh** energy declaration. **Wh values are not accepted**, and **no automatic conversion** is performed.
+
+**Canonical usage:**
+```bash
+python csv_cleaner.py --energy-column "Energy Consumed" --energy-unit kwh input.csv
+```
+
+**Warning:** Relaxing this rule invalidates simulator correctness guarantees.
 
 
 

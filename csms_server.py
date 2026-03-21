@@ -7,9 +7,13 @@ import websockets
 from ocpp.routing import on
 from ocpp.v16 import ChargePoint as CP
 from ocpp.v16 import call, call_result
-from ocpp.v16.enums import RegistrationStatus
+from ocpp_compat import build_call_result
+from ocpp.v16.enums import ChargingRateUnitType, RegistrationStatus
 from security_monitor import EventType, security_monitor
 from security_detection import flow_tracker, rule_evaluator
+from security_pipeline import validate_ocpp_message, ocpp_state_machine, ocpp_rate_limiter
+from typing import Optional
+from replay_mode import log_mode_banner, is_replay_mode_explicit, set_replay_mode, ReplayMode
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("csms")
@@ -162,6 +166,22 @@ class CentralSystemChargePoint(CP):
         self._meter_times = deque(maxlen=200)
         self._active_transactions = set()
 
+    def _security_gate(
+        self,
+        action: str,
+        payload: Optional[dict] = None,
+        was_auth_successful: Optional[bool] = None,
+    ) -> bool:
+        """Run intake pipeline checks before business logic for each CALL action."""
+        frame = [2, f"{self.id}-{action}", action, payload or {}]
+        if not validate_ocpp_message(frame, {"charge_point_id": self.id}):
+            return False
+        if not ocpp_state_machine.check_allowed_transition(self.id, action):
+            return False
+        if not ocpp_rate_limiter.check(self.id, action, was_auth_successful=was_auth_successful, raw_message=frame):
+            return False
+        return True
+
     def _check_flood(self, events: deque, limit: int, window_seconds: int, label: str) -> None:
         now = datetime.now(timezone.utc)
         recent = [t for t in events if (now - t).total_seconds() <= window_seconds]
@@ -175,6 +195,20 @@ class CentralSystemChargePoint(CP):
 
     @on("BootNotification")
     async def on_boot_notification(self, charge_point_model, charge_point_vendor, **kwargs):
+        if not self._security_gate(
+            "BootNotification",
+            {
+                "chargePointModel": charge_point_model,
+                "chargePointVendor": charge_point_vendor,
+                **kwargs,
+            },
+        ):
+            return build_call_result(
+                "BootNotification",
+                current_time=datetime.now(timezone.utc).isoformat(),
+                interval=300,
+                status=RegistrationStatus.rejected,
+            )
         logger.info(f"{self.id}: BootNotification model={charge_point_model}, vendor={charge_point_vendor}")
         flow_tracker.record_event("BOOT_NOTIFICATION", self.id)
         now = datetime.now(timezone.utc)
@@ -188,7 +222,8 @@ class CentralSystemChargePoint(CP):
                 severity="medium",
             )
         # Return a dataclass instance, NOT a dict
-        return call_result.BootNotification(
+        return build_call_result(
+            "BootNotification",
             current_time=datetime.now(timezone.utc).isoformat(),
             interval=60,
             status=RegistrationStatus.accepted,   # or "Accepted" also works in most versions
@@ -200,7 +235,8 @@ class CentralSystemChargePoint(CP):
         flow_tracker.record_event("HEARTBEAT", self.id)
         self._heartbeat_times.append(datetime.now(timezone.utc))
         self._check_flood(self._heartbeat_times, limit=20, window_seconds=60, label="Heartbeat")
-        return call_result.Heartbeat(
+        return build_call_result(
+            "Heartbeat",
             current_time=datetime.now(timezone.utc).isoformat()
         )
 
@@ -211,20 +247,53 @@ class CentralSystemChargePoint(CP):
             f"status={status}, error_code={error_code}"
         )
         # Empty payload object
-        return call_result.StatusNotification()
+        return build_call_result("StatusNotification")
 
     @on("Authorize")
     async def on_authorize(self, id_tag, **kwargs):
+        auth_success = isinstance(id_tag, str) and bool(id_tag.strip())
+        if not self._security_gate("Authorize", {"idTag": id_tag, **kwargs}, was_auth_successful=auth_success):
+            return build_call_result(
+                "Authorize",
+                id_tag_info={"status": "Blocked"}
+            )
         logger.info(f"{self.id}: Authorize id_tag={id_tag}")
         flow_tracker.record_event("AUTH_REQUEST", self.id)
         self._authorize_times.append(datetime.now(timezone.utc))
         self._check_flood(self._authorize_times, limit=15, window_seconds=60, label="Authorize")
-        return call_result.Authorize(
+        if not auth_success:
+            security_monitor.log_event(
+                EventType.UNAUTHORIZED_ACTION,
+                self.id,
+                "Authorize request rejected due to missing id_tag",
+                severity=6,
+            )
+            return build_call_result(
+                "Authorize",
+                id_tag_info={"status": "Invalid"}
+            )
+        return build_call_result(
+            "Authorize",
             id_tag_info={"status": "Accepted"}
         )
 
     @on("StartTransaction")
     async def on_start_transaction(self, connector_id, id_tag, meter_start, timestamp, **kwargs):
+        if not self._security_gate(
+            "StartTransaction",
+            {
+                "connectorId": connector_id,
+                "idTag": id_tag,
+                "meterStart": meter_start,
+                "timestamp": timestamp,
+                **kwargs,
+            },
+        ):
+            return build_call_result(
+                "StartTransaction",
+                transaction_id=-1,
+                id_tag_info={"status": "Blocked"},
+            )
         logger.info(
             f"{self.id}: StartTransaction id_tag={id_tag}, connector={connector_id}, meter_start={meter_start}"
         )
@@ -232,19 +301,31 @@ class CentralSystemChargePoint(CP):
         transaction_id = 1234
         if transaction_id in self._active_transactions:
             security_monitor.log_event(
-                EventType.DUPLICATE_TRANSACTION,
+                EventType.INVALID_STATE_TRANSITION,
                 self.id,
                 f"Duplicate StartTransaction for tx {transaction_id}",
-                severity="medium",
+                severity=7,
             )
         self._active_transactions.add(transaction_id)
-        return call_result.StartTransaction(
+        return build_call_result(
+            "StartTransaction",
             transaction_id=transaction_id,
             id_tag_info={"status": "Accepted"},
         )
 
     @on("MeterValues")
     async def on_meter_values(self, connector_id, transaction_id, meter_value, **kwargs):
+        if not self._security_gate(
+            "MeterValues",
+            {
+                "connectorId": connector_id,
+                "transactionId": transaction_id,
+                "meterValue": meter_value,
+                **kwargs,
+            },
+        ):
+            meter_values_cls = getattr(call_result, "MeterValues", None) or getattr(call_result, "MeterValuesPayload")
+            return meter_values_cls()
         logger.info(
             f"{self.id}: MeterValues connector={connector_id}, tx={transaction_id}, values={meter_value}"
         )
@@ -253,28 +334,44 @@ class CentralSystemChargePoint(CP):
         self._check_flood(self._meter_times, limit=30, window_seconds=60, label="MeterValues")
         if self._active_transactions and transaction_id not in self._active_transactions:
             security_monitor.log_event(
-                EventType.DUPLICATE_TRANSACTION,
+                EventType.INVALID_STATE_TRANSITION,
                 self.id,
                 f"MeterValues for unknown tx {transaction_id}",
-                severity="medium",
+                severity=7,
             )
-        return call_result.MeterValues()
+        meter_values_cls = getattr(call_result, "MeterValues", None) or getattr(call_result, "MeterValuesPayload")
+        return meter_values_cls()
 
     @on("StopTransaction")
     async def on_stop_transaction(self, transaction_id, meter_stop, timestamp, id_tag=None, **kwargs):
+        if not self._security_gate(
+            "StopTransaction",
+            {
+                "transactionId": transaction_id,
+                "meterStop": meter_stop,
+                "timestamp": timestamp,
+                "idTag": id_tag,
+                **kwargs,
+            },
+        ):
+            return build_call_result(
+                "StopTransaction",
+                id_tag_info={"status": "Blocked"},
+            )
         logger.info(
             f"{self.id}: StopTransaction tx={transaction_id}, meter_stop={meter_stop}, id_tag={id_tag}"
         )
         flow_tracker.record_event("STOP_TRANSACTION", self.id)
         if self._active_transactions and transaction_id not in self._active_transactions:
             security_monitor.log_event(
-                EventType.DUPLICATE_TRANSACTION,
+                EventType.INVALID_STATE_TRANSITION,
                 self.id,
                 f"StopTransaction for unknown tx {transaction_id}",
-                severity="medium",
+                severity=7,
             )
         self._active_transactions.discard(transaction_id)
-        return call_result.StopTransaction(
+        return build_call_result(
+            "StopTransaction",
             id_tag_info={"status": "Accepted"},
         )
 
@@ -314,13 +411,16 @@ class CentralSystemChargePoint(CP):
             )
             
             response = await self.call(request)
-            
+            status = getattr(response, "status", None)
+            if status is None:
+                raise RuntimeError("SetChargingProfile response missing status")
+
             logger.info(
-                f"{self.id}: SetChargingProfile response: {response.status}"
+                f"{self.id}: SetChargingProfile response: {status}"
             )
-            
+
             return {
-                "status": response.status,
+                "status": status,
                 "connector_id": connector_id,
                 "profile_id": profile_dict.get('chargingProfileId')
             }
@@ -363,30 +463,38 @@ class CentralSystemChargePoint(CP):
                 f"duration={duration}s, unit={charging_rate_unit}"
             )
             
+            try:
+                rate_unit = ChargingRateUnitType(charging_rate_unit)
+            except Exception:
+                rate_unit = ChargingRateUnitType("W")
             request = call.GetCompositeSchedule(
                 connector_id=connector_id,
                 duration=duration,
-                charging_rate_unit=charging_rate_unit
+                charging_rate_unit=rate_unit,
             )
             
             response = await self.call(request)
-            
+            status = getattr(response, "status", None)
+            if status is None:
+                raise RuntimeError("GetCompositeSchedule response missing status")
+
             logger.info(
-                f"{self.id}: GetCompositeSchedule response: {response.status}"
+                f"{self.id}: GetCompositeSchedule response: {status}"
             )
-            
+
             result = {
-                "status": response.status,
+                "status": status,
                 "connector_id": getattr(response, 'connector_id', connector_id)
             }
             
             # Add schedule if accepted
-            if response.status == "Accepted" and hasattr(response, 'charging_schedule'):
+            schedule = getattr(response, "charging_schedule", None)
+            if status == "Accepted" and isinstance(schedule, dict):
                 result["schedule_start"] = getattr(response, 'schedule_start', None)
-                result["chargingSchedule"] = response.charging_schedule
+                result["chargingSchedule"] = schedule
                 
                 # Count periods for logging
-                periods = response.charging_schedule.get('chargingSchedulePeriod', [])
+                periods = schedule.get('chargingSchedulePeriod', [])
                 logger.info(
                     f"{self.id}: Received composite schedule with {len(periods)} periods"
                 )
@@ -405,10 +513,10 @@ class CentralSystemChargePoint(CP):
 
     async def clear_charging_profile_from_station(
         self,
-        profile_id: int = None,
-        connector_id: int = None,
-        purpose: str = None,
-        stack_level: int = None
+        profile_id: Optional[int] = None,
+        connector_id: Optional[int] = None,
+        purpose: Optional[str] = None,
+        stack_level: Optional[int] = None
     ) -> dict:
         """
         Clear charging profiles from the station with optional filters.
@@ -466,13 +574,16 @@ class CentralSystemChargePoint(CP):
             request = call.ClearChargingProfile(**request_params)
             
             response = await self.call(request)
-            
+            status = getattr(response, "status", None)
+            if status is None:
+                raise RuntimeError("ClearChargingProfile response missing status")
+
             logger.info(
-                f"{self.id}: ClearChargingProfile response: {response.status}"
+                f"{self.id}: ClearChargingProfile response: {status}"
             )
-            
+
             return {
-                "status": response.status,
+                "status": status,
                 "filters": {
                     "profile_id": profile_id,
                     "connector_id": connector_id,
@@ -552,11 +663,14 @@ async def on_connect(connection):
 
 async def main():
     asyncio.create_task(rule_evaluator.run())
+    if not is_replay_mode_explicit():
+        set_replay_mode(ReplayMode.STRICT)
+    log_mode_banner(logger)
     server = await websockets.serve(
         on_connect,
         "0.0.0.0",
         9000,
-        subprotocols=["ocpp1.6"],
+        subprotocols=["ocpp1.6"],  # type: ignore[arg-type]
     )
     logger.info("CSMS listening on ws://0.0.0.0:9000/ocpp/<station_id>")
     await server.wait_closed()

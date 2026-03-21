@@ -1,36 +1,27 @@
-import asyncio
 import logging
-import random
-import time
+from contextlib import contextmanager
 from collections import deque
-from datetime import datetime, timezone
-from typing import Tuple
+from typing import Tuple, Optional, Dict, Callable
 
-import websockets
 from ocpp.routing import on
 from ocpp.v16 import ChargePoint as CP
 from ocpp.v16.enums import (
-    RegistrationStatus,
-    ChargePointStatus,
-    ChargePointErrorCode,
     ChargingProfileStatus,
     ClearChargingProfileStatus,
 )
 from ocpp.v16 import call, call_result
+from ocpp_compat import build_call
 
-from profiles import StationProfile
 from metrics import (
-    record_station_started,
-    record_station_stopped,
     record_transaction_started,
     record_energy_dispensed,
     record_meter_value,
 )
-from charging_policy import evaluate_charging_policy, evaluate_meter_value_decision
+from meter_values_generator import build_meter_values, build_meter_values_with_power_soc
+from live_metrics import record_live_metrics
+from replay_mode import assert_real_csv_entry_active, is_real_csv_mode, is_strict_mode
 from fault_injector import fault_manager, FaultType
 from ev_model import BatteryModel
-from security_monitor import EventType, security_monitor
-from security_detection import flow_tracker, rule_evaluator
 from db import (
     add_energy_snapshot,
     log_station_message,
@@ -47,6 +38,8 @@ from charging_profile_manager import (
     ChargingProfilePurpose,
 )
 
+DOMAIN = "CHARGING"
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("station")
 
@@ -57,6 +50,33 @@ def is_peak_hour(hour: int, peak_hours: tuple = (8, 18)) -> bool:
     return peak_start <= hour < peak_end
 
 
+def get_next_session_plan(
+    session_plan_provider: Optional[Callable[[str], Optional[Dict[str, object]]]],
+    station_id: str,
+) -> Optional[Dict[str, object]]:
+    """
+    Fetch the next session plan for a station.
+
+        TODO: TO BE DRIVEN BY REAL CSV SESSION DATA
+        The provider must return a dict containing CSV-driven session fields:
+            - idle_seconds
+            - id_tag
+            - connector_id
+            - meter_start_wh
+            - meter_stop_wh
+            - meter_intervals_sec
+            - meter_values_wh
+            - price_per_kwh (optional)
+            - offline_seconds (optional)
+            - transaction_id (optional)
+    """
+    if session_plan_provider is None:
+        raise RuntimeError(
+            "Session plan provider required; charging must be driven by replay engine"
+        )
+    return session_plan_provider(station_id)
+
+
 
 class SimulatedChargePoint(CP):
     def __init__(self, id, connection):
@@ -64,6 +84,9 @@ class SimulatedChargePoint(CP):
         self.id = id
         self.current_transaction_id = None
         self._last_transaction_id = None
+        self._active_transactions_by_connector = {}
+        self._active_sessions_by_connector = {}
+        self._replay_context_active = False
         self._heartbeat_flood_until = None
         self._duplicate_tx_until = None
         self._tamper_until = None
@@ -124,8 +147,7 @@ class SimulatedChargePoint(CP):
         if fault.fault_type == FaultType.TIMEOUT:
             delay = fault.duration or 5
             self.log(f"{message_type}: TIMEOUT {delay}s (Fault Injection)")
-            await asyncio.sleep(delay)
-            return False, False
+            return True, False
 
         if fault.fault_type == FaultType.DISCONNECT:
             duration = fault.duration or 5
@@ -134,7 +156,6 @@ class SimulatedChargePoint(CP):
                 await self._connection.close()
             except Exception:
                 pass
-            await asyncio.sleep(duration)
             return True, False
 
         if fault.fault_type == FaultType.DROP_MESSAGE:
@@ -162,46 +183,60 @@ class SimulatedChargePoint(CP):
 
     async def call(self, payload, suppress: bool = False):
         message_type = payload.__class__.__name__
+        if message_type in {"MeterValues", "StartTransaction", "StopTransaction"} and not self._replay_context_active:
+            raise RuntimeError(
+                "Transaction outside replay forbidden"
+            )
         should_drop, should_corrupt = await self._apply_fault(message_type)
         if should_drop:
             return None
-        if self._is_tamper_active() and (self._tamper_target in (None, message_type)):
-            payload = self._corrupt_request_payload(payload, self._tamper_type or "truncate_field")
-        elif should_corrupt:
+        if should_corrupt:
             payload = self._corrupt_request_payload(payload)
         return await super().call(payload, suppress=suppress)
 
-    def _attack_active(self, until) -> bool:
-        return until is not None and time.monotonic() <= until
+    @contextmanager
+    def _replay_context(self, action: str):
+        if self._replay_context_active:
+            raise RuntimeError(f"Nested replay context not allowed: {action}")
+        self._replay_context_active = True
+        try:
+            yield
+        finally:
+            self._replay_context_active = False
+
+    def _assert_replay_context(self, action: str) -> None:
+        if not self._replay_context_active:
+            raise RuntimeError(
+                f"Charging state change outside replay context: {action}"
+            )
+
+    def _set_active_transaction(self, connector_id: int, transaction_id: int, session_id: str) -> None:
+        self._assert_replay_context("set_active_transaction")
+        self._active_transactions_by_connector[connector_id] = transaction_id
+        self._active_sessions_by_connector[connector_id] = session_id
+        self.current_transaction_id = transaction_id
+
+    def _clear_active_transaction(self, connector_id: int, transaction_id: int) -> None:
+        self._assert_replay_context("clear_active_transaction")
+        self._active_transactions_by_connector.pop(connector_id, None)
+        self._active_sessions_by_connector.pop(connector_id, None)
+        if self.current_transaction_id == transaction_id:
+            self.current_transaction_id = None
 
     def _is_heartbeat_flood_active(self) -> bool:
-        return self._attack_active(self._heartbeat_flood_until)
+        return False
 
     def _is_duplicate_tx_active(self) -> bool:
-        return self._attack_active(self._duplicate_tx_until)
+        return False
 
     def _is_tamper_active(self) -> bool:
-        return self._attack_active(self._tamper_until)
+        return False
 
     def enable_heartbeat_flood(self, duration: float = 30) -> None:
-        self._heartbeat_flood_until = time.monotonic() + (duration or 30)
-        self.log(f"Security: Heartbeat flood enabled for {duration}s")
-        security_monitor.log_event(
-            EventType.HEARTBEAT_FLOOD,
-            self.id,
-            f"Heartbeat flood enabled for {duration}s",
-            severity="medium",
-        )
+        raise RuntimeError("Wall-clock security faults are forbidden; use replay-driven faults")
 
     def enable_duplicate_transactions(self, duration: float = 30) -> None:
-        self._duplicate_tx_until = time.monotonic() + (duration or 30)
-        self.log(f"Security: Duplicate transactions enabled for {duration}s")
-        security_monitor.log_event(
-            EventType.DUPLICATE_TRANSACTION,
-            self.id,
-            f"Duplicate transactions enabled for {duration}s",
-            severity="medium",
-        )
+        raise RuntimeError("Wall-clock security faults are forbidden; use replay-driven faults")
 
     def enable_tamper_payload(
         self,
@@ -209,31 +244,23 @@ class SimulatedChargePoint(CP):
         corruption_type: str = "truncate_field",
         duration: float = 30,
     ) -> None:
-        self._tamper_until = time.monotonic() + (duration or 30)
-        self._tamper_target = target_message
-        self._tamper_type = corruption_type
-        self.log(
-            f"Security: Tamper payload enabled for {duration}s (target={target_message}, type={corruption_type})"
-        )
-        security_monitor.log_event(
-            EventType.MALFORMED_MESSAGE,
-            self.id,
-            f"Payload tamper enabled (target={target_message}, type={corruption_type})",
-            severity="high",
-        )
+        raise RuntimeError("Wall-clock tamper faults are forbidden; use replay-driven faults")
 
-    def log(self, message: str) -> None:
+    def log(self, message: str, replay_timestamp: object = None) -> None:
         """
         Add a timestamped log entry to the buffer.
         
         Args:
             message: Description of the event/action
         """
-        timestamp_dt = datetime.now(timezone.utc)
-        timestamp = datetime.now().strftime("%H:%M:%S")
-        log_entry = f"[{timestamp}] {message}"
+        if replay_timestamp is None:
+            log_entry = message
+            self.log_buffer.append(log_entry)
+            return
+        timestamp_text = str(replay_timestamp)
+        log_entry = f"[{timestamp_text}] {message}"
         self.log_buffer.append(log_entry)
-        log_station_message(self.id, message, timestamp=timestamp_dt)
+        log_station_message(self.id, message, timestamp=replay_timestamp)
 
     def get_logs(self) -> list:
         """
@@ -243,6 +270,192 @@ class SimulatedChargePoint(CP):
             List of recent log entries
         """
         return list(self.log_buffer)
+
+    # -------------------- REPLAY API --------------------
+
+    async def start_replay_transaction(
+        self,
+        connector_id: int,
+        id_tag: str,
+        meter_start: int,
+        timestamp: object,
+        session_id: str,
+    ) -> int:
+        """
+        Start a deterministic replay transaction on a connector.
+        """
+        with self._replay_context("start_replay_transaction"):
+            self._assert_replay_context("start_replay_transaction")
+            if connector_id in self._active_transactions_by_connector:
+                raise ValueError(
+                    f"Connector {connector_id} already has an active transaction"
+                )
+
+            if not hasattr(timestamp, "isoformat"):
+                raise RuntimeError("Replay timestamp required")
+            req = build_call(
+                "StartTransaction",
+                connector_id=connector_id,
+                id_tag=id_tag,
+                meter_start=meter_start,
+                timestamp=timestamp.isoformat(),
+            )
+            res = await self.call(req)
+
+            transaction_id = getattr(res, "transaction_id", None)
+            if transaction_id is None:
+                raise ValueError("StartTransaction response missing transaction_id")
+
+            self._set_active_transaction(connector_id, transaction_id, session_id)
+
+            record_transaction_started()
+            start_session_history(
+                session_id=transaction_id,
+                station_id=self.id,
+                start_time=timestamp,
+            )
+            self.log(
+                f"Replay StartTransaction (tx={transaction_id}, connector={connector_id}, session={session_id})",
+                replay_timestamp=timestamp,
+            )
+            return transaction_id
+
+    async def emit_replay_meter_values(
+        self,
+        connector_id: int,
+        transaction_id: int,
+        energy_wh: float,
+        timestamp: object,
+    ) -> None:
+        """
+        Emit deterministic MeterValues for an active replay transaction.
+        """
+        with self._replay_context("emit_replay_meter_values"):
+            self._assert_replay_context("emit_replay_meter_values")
+            active_tx = self._active_transactions_by_connector.get(connector_id)
+            if active_tx != transaction_id:
+                raise ValueError(
+                    f"MeterValues tx mismatch for connector {connector_id}: "
+                    f"active={active_tx}, got={transaction_id}"
+                )
+
+            if not hasattr(timestamp, "isoformat"):
+                raise RuntimeError("Replay timestamp required")
+            mv_req = build_meter_values(
+                connector_id=connector_id,
+                transaction_id=transaction_id,
+                energy_wh=energy_wh,
+                timestamp=timestamp,
+            )
+
+            await self.call(mv_req)
+
+            record_meter_value()
+            add_energy_snapshot(
+                station_id=self.id,
+                energy_kwh=energy_wh / 1000.0,
+                timestamp=timestamp,
+            )
+
+    async def emit_replay_meter_values_live(
+        self,
+        connector_id: int,
+        transaction_id: int,
+        energy_wh: float,
+        power_kw: float,
+        soc_percent: float,
+        timestamp: object,
+    ) -> None:
+        """
+        Emit live MeterValues for REAL_CSV charging loop with power and SOC.
+        """
+        if is_strict_mode():
+            raise RuntimeError("Live MeterValues are forbidden in STRICT mode")
+        if not is_real_csv_mode():
+            raise RuntimeError("Live MeterValues require REAL_CSV mode")
+        assert_real_csv_entry_active()
+        with self._replay_context("emit_replay_meter_values_live"):
+            self._assert_replay_context("emit_replay_meter_values_live")
+            active_tx = self._active_transactions_by_connector.get(connector_id)
+            if active_tx != transaction_id:
+                raise ValueError(
+                    f"MeterValues tx mismatch for connector {connector_id}: "
+                    f"active={active_tx}, got={transaction_id}"
+                )
+
+            if not hasattr(timestamp, "isoformat"):
+                raise RuntimeError("Replay timestamp required")
+            mv_req = build_meter_values_with_power_soc(
+                connector_id=connector_id,
+                transaction_id=transaction_id,
+                energy_wh=energy_wh,
+                power_kw=power_kw,
+                soc_percent=soc_percent,
+                timestamp=timestamp,
+            )
+
+            await self.call(mv_req)
+
+            record_meter_value()
+            add_energy_snapshot(
+                station_id=self.id,
+                energy_kwh=energy_wh / 1000.0,
+                timestamp=timestamp,
+            )
+            record_live_metrics(
+                station_id=self.id,
+                power_kw=power_kw,
+                energy_kwh=energy_wh / 1000.0,
+                soc_percent=soc_percent,
+                timestamp=timestamp,
+            )
+
+    async def stop_replay_transaction(
+        self,
+        connector_id: int,
+        transaction_id: int,
+        meter_stop: int,
+        timestamp: object,
+        id_tag: str,
+    ) -> None:
+        """
+        Stop a deterministic replay transaction on a connector.
+        """
+        with self._replay_context("stop_replay_transaction"):
+            self._assert_replay_context("stop_replay_transaction")
+            active_tx = self._active_transactions_by_connector.get(connector_id)
+            if active_tx != transaction_id:
+                raise ValueError(
+                    f"StopTransaction tx mismatch for connector {connector_id}: "
+                    f"active={active_tx}, got={transaction_id}"
+                )
+
+            if not hasattr(timestamp, "isoformat"):
+                raise RuntimeError("Replay timestamp required")
+            stop_req = build_call(
+                "StopTransaction",
+                transaction_id=transaction_id,
+                meter_stop=meter_stop,
+                timestamp=timestamp.isoformat(),
+                id_tag=id_tag,
+            )
+            await self.call(stop_req)
+
+            energy_kwh = meter_stop / 1000.0
+            record_energy_dispensed(energy_kwh)
+            stop_session_history(
+                session_id=transaction_id,
+                station_id=self.id,
+                stop_time=timestamp,
+                energy_kwh=energy_kwh,
+            )
+
+            self._clear_active_transaction(connector_id, transaction_id)
+
+            self.log(
+                f"Replay StopTransaction (tx={transaction_id}, connector={connector_id})",
+                replay_timestamp=timestamp,
+            )
 
     # -------------------- OCPP HANDLERS --------------------
 
@@ -271,11 +484,11 @@ class SimulatedChargePoint(CP):
             return None
         logger.info(f"{self.id}: RemoteStopTransaction for tx {transaction_id}")
         if self.current_transaction_id is not None and transaction_id != self.current_transaction_id:
-            security_monitor.log_event(
-                EventType.DUPLICATE_TRANSACTION,
+            logger.warning(
+                "Security event (duplicate transaction) station=%s tx=%s current=%s",
                 self.id,
-                f"RemoteStopTransaction for unknown tx {transaction_id} (current {self.current_transaction_id})",
-                severity="medium",
+                transaction_id,
+                self.current_transaction_id,
             )
         return {"status": "Accepted"}
 
@@ -303,7 +516,14 @@ class SimulatedChargePoint(CP):
                 return None
             # Persist raw profile JSON on receipt
             profile_id = cs_charging_profiles.get("chargingProfileId")
-            save_charging_profile(self.id, cs_charging_profiles, profile_id=profile_id)
+            profile_schedule = cs_charging_profiles.get("chargingSchedule") or {}
+            created_at = profile_schedule.get("startSchedule")
+            save_charging_profile(
+                self.id,
+                cs_charging_profiles,
+                profile_id=profile_id,
+                created_at=created_at,
+            )
 
             # Parse the charging profile from OCPP dict
             profile = parse_charging_profile(cs_charging_profiles)
@@ -360,6 +580,11 @@ class SimulatedChargePoint(CP):
             should_drop, _ = await self._apply_fault("GetCompositeSchedule")
             if should_drop:
                 return None
+            start_time_value = kwargs.get("start_time")
+            if start_time_value is None or not hasattr(start_time_value, "isoformat"):
+                raise RuntimeError("Explicit start_time required")
+            start_time = start_time_value
+
             # Extract optional chargingRateUnit, default to "W"
             rate_unit_str = kwargs.get("charging_rate_unit", "W")
             try:
@@ -371,13 +596,14 @@ class SimulatedChargePoint(CP):
             schedule = self.profile_manager.get_composite_schedule(
                 connector_id=connector_id,
                 duration=duration,
-                charging_rate_unit=rate_unit
+                charging_rate_unit=rate_unit,
+                start_time=start_time,
             )
             
             if schedule:
                 # Convert schedule to OCPP dict format
                 schedule_dict = schedule.to_dict()
-                schedule_start = datetime.now(timezone.utc).isoformat()
+                schedule_start = start_time.isoformat()
                 
                 logger.info(
                     f"{self.id}: GetCompositeSchedule accepted - "
@@ -519,10 +745,13 @@ class SimulatedChargePoint(CP):
                     f"(purpose={profile.charging_profile_purpose.value}, "
                     f"stackLevel={profile.stack_level})"
                 )
+                profile_schedule = profile_dict.get("chargingSchedule") or {}
+                created_at = profile_schedule.get("startSchedule")
                 save_charging_profile(
                     self.id,
                     profile_dict,
                     profile_id=profile.charging_profile_id,
+                    created_at=created_at,
                 )
                 return {
                     "status": "Accepted",
@@ -549,7 +778,8 @@ class SimulatedChargePoint(CP):
         self,
         connector_id: int,
         duration: int,
-        charging_rate_unit: str = "W"
+        charging_rate_unit: str = "W",
+        start_time: object = None,
     ) -> dict:
         """
         Get the composite schedule for a connector.
@@ -565,11 +795,15 @@ class SimulatedChargePoint(CP):
         try:
             from charging_profile_manager import ChargingRateUnit
             
+            if start_time is None or not hasattr(start_time, "isoformat"):
+                raise RuntimeError("Explicit start_time required")
+
             unit = ChargingRateUnit.W if charging_rate_unit == "W" else ChargingRateUnit.A
             schedule = self.profile_manager.get_composite_schedule(
                 connector_id=connector_id,
                 duration=duration,
-                charging_rate_unit=unit
+                charging_rate_unit=unit,
+                start_time=start_time,
             )
             
             if schedule:
@@ -612,10 +846,10 @@ class SimulatedChargePoint(CP):
 
     async def clear_charging_profile_from_station(
         self,
-        profile_id: int = None,
-        connector_id: int = None,
-        purpose: str = None,
-        stack_level: int = None
+        profile_id: Optional[int] = None,
+        connector_id: Optional[int] = None,
+        purpose: Optional[str] = None,
+        stack_level: Optional[int] = None
     ) -> dict:
         """
         Clear charging profiles from the station.
@@ -682,408 +916,3 @@ class SimulatedChargePoint(CP):
             }
 
 
-# =========================================================
-# MAIN STATION SIMULATOR
-# =========================================================
-
-async def simulate_station(
-    station_id: str,
-    csms_url: str,
-    profile: StationProfile,
-    current_price: float = 20.0,
-    on_chargepoint_ready=None,
-):
-    """
-    Run a single simulated charging station until cancelled.
-    Implements smart charging based on price and time of day.
-    
-    Args:
-        station_id: Unique station identifier
-        csms_url: WebSocket URL for CSMS
-        profile: Station behavior profile
-        current_price: Current electricity price ($/kWh) - updated via reference
-        on_chargepoint_ready: Optional callback to register the ChargePoint instance
-    """
-
-    # Record station startup
-    record_station_started()
-
-    ws = await websockets.connect(
-        f"{csms_url}/{station_id}",
-        subprotocols=["ocpp1.6"],
-    )
-
-    cp = SimulatedChargePoint(station_id, ws)
-    
-    # Register chargepoint instance with callback if provided
-    if on_chargepoint_ready:
-        on_chargepoint_ready(station_id, cp)
-
-    # -------------------- BOOT --------------------
-
-    async def send_boot_notification():
-        now = datetime.now(timezone.utc)
-        cp._boot_times.append(now)
-        recent_boots = [t for t in cp._boot_times if (now - t).total_seconds() <= 60]
-        if len(recent_boots) > 3:
-            security_monitor.log_event(
-                EventType.HEARTBEAT_FLOOD,
-                station_id,
-                "Repeated BootNotifications within 60s",
-                severity="medium",
-            )
-        flow_tracker.record_event("BOOT_NOTIFICATION", station_id)
-        cp.log("BootNotification sent")
-        req = call.BootNotification(
-            charge_point_model="PythonSim-Model",
-            charge_point_vendor="PythonSim-Vendor",
-        )
-        response = await cp.call(req)
-        logger.info(f"{station_id}: BootNotification response: {response}")
-
-        status = getattr(response, "status", None)
-        if status not in (RegistrationStatus.accepted, "Accepted"):
-            logger.warning(f"{station_id}: Not accepted by CSMS: {status}")
-            cp.log(f"BootNotification rejected: {status}")
-        else:
-            cp.log("BootNotification accepted")
-
-    # -------------------- HEARTBEAT --------------------
-
-    async def send_heartbeat_loop():
-        while True:
-            fault_manager.tick()
-            interval = 1 if cp._is_heartbeat_flood_active() else profile.heartbeat_interval
-            await asyncio.sleep(interval)
-            flow_tracker.record_event("HEARTBEAT", station_id)
-            response = await cp.call(call.Heartbeat())
-            logger.info(f"{station_id}: Heartbeat -> {response}")
-            cp.log("Heartbeat sent")
-
-    # -------------------- TRANSACTION LOOP --------------------
-
-    async def auto_transaction_loop():
-        if not profile.enable_transactions:
-            logger.info(f"{station_id}: Transactions disabled by profile")
-            return
-
-        while True:
-            fault_manager.tick()
-            # Idle before next session
-            idle = random.randint(profile.idle_min, profile.idle_max)
-            logger.info(f"{station_id}: Waiting {idle}s before new session")
-            await asyncio.sleep(idle)
-
-            id_tag = random.choice(profile.id_tags)
-            connector_id = 1
-            
-            # Get current time and price for smart charging decisions
-            current_hour = datetime.now(timezone.utc).hour
-            current_price_val = current_price  # Use the passed price
-            
-            # ========== SMART CHARGING POLICY ENGINE ==========
-            # Evaluate charging decision using policy engine
-            policy_decision = evaluate_charging_policy(
-                station_state={
-                    "energy_dispensed": 0.0,  # Fresh session
-                    "charging": False,
-                    "session_active": False
-                },
-                profile={
-                    "charge_if_price_below": profile.charge_if_price_below,
-                    "max_energy_kwh": profile.max_energy_kwh,
-                    "allow_peak_hours": profile.allow_peak,
-                    "peak_hours": profile.peak_hours
-                },
-                env={
-                    "current_price": current_price_val,
-                    "hour": current_hour
-                }
-            )
-            
-            if policy_decision["action"] != "charge":
-                logger.info(
-                    f"{station_id}: Smart charging blocked - {policy_decision['reason']}"
-                )
-                cp.log(f"{policy_decision['reason']} — waiting")
-                # Wait a bit and retry instead of progressing to next idle
-                await asyncio.sleep(60)
-                continue
-
-            # Simulate flaky/offline behavior
-            if random.random() < profile.offline_probability:
-                logger.info(f"{station_id}: Simulating offline period")
-                await ws.close()
-                await asyncio.sleep(profile.offline_duration)
-                logger.info(f"{station_id}: Offline period ended")
-                return  # let manager restart if needed
-
-            # -------- Authorize --------
-            auth_req = call.Authorize(id_tag=id_tag)
-            flow_tracker.record_event("AUTH_REQUEST", station_id)
-            auth_res = await cp.call(auth_req)
-            logger.info(f"{station_id}: Authorize({id_tag}) -> {auth_res}")
-            auth_status = getattr(auth_res, "id_tag_info", {})
-            auth_result = getattr(auth_status, "status", "Unknown") if auth_status else "Unknown"
-            if auth_result == "Accepted":
-                cp.log(f"Authorization successful - {id_tag}")
-            else:
-                cp.log(f"Authorization failed - {id_tag} ({auth_result})")
-                security_monitor.log_event(
-                    EventType.AUTH_FAILURE,
-                    station_id,
-                    f"Authorize rejected for id_tag {id_tag} ({auth_result})",
-                    severity="low",
-                )
-
-            # -------- Start Transaction --------
-            start_req = call.StartTransaction(
-                connector_id=connector_id,
-                id_tag=id_tag,
-                meter_start=0,
-                timestamp=datetime.now(timezone.utc).isoformat(),
-            )
-            flow_tracker.record_event("START_TRANSACTION", station_id)
-            start_res = await cp.call(start_req)
-            logger.info(
-                f"{station_id}: StartTransaction -> {start_res} "
-                f"(price: ${current_price_val:.2f}, peak: {is_peak_hour(current_hour, profile.peak_hours)})"
-            )
-            cp.log(f"Charging started (price: ${current_price_val:.2f}, id_tag: {id_tag})")
-
-            # Record transaction started
-            record_transaction_started()
-
-            transaction_id = getattr(start_res, "transaction_id", None)
-            if transaction_id is None:
-                transaction_id = random.randint(1000, 9999)
-                logger.warning(
-                    f"{station_id}: Missing transaction_id, using fake {transaction_id}"
-                )
-            if cp._is_duplicate_tx_active() and cp._last_transaction_id is not None:
-                transaction_id = cp._last_transaction_id
-                cp.log(f"Security: Duplicate transaction ID used: {transaction_id}")
-                security_monitor.log_event(
-                    EventType.DUPLICATE_TRANSACTION,
-                    station_id,
-                    f"Duplicate transaction ID reused: {transaction_id}",
-                    severity="medium",
-                )
-            cp._last_transaction_id = transaction_id
-            cp.current_transaction_id = transaction_id
-            start_session_history(
-                session_id=transaction_id,
-                station_id=station_id,
-                start_time=datetime.now(timezone.utc),
-            )
-
-            self_energy = 0
-            max_energy_wh = int(profile.max_energy_kwh * 1000)  # Convert kWh to Wh
-
-            # -------- MeterValues Loop (OCPP Smart Charging + Legacy Policy) --------
-            # Loop until energy limit is reached or random iterations completed
-            max_iterations = random.randint(3, 8)
-            for iteration in range(max_iterations):
-                fault_manager.tick()
-                sample_interval_seconds = random.randint(
-                    profile.sample_interval_min,
-                    profile.sample_interval_max,
-                )
-                await asyncio.sleep(sample_interval_seconds)
-
-                # ========== OCPP SMART CHARGING PROFILE LIMITS ==========
-                # Check if OCPP charging profile limits are active
-                profile_limit_w = self.profile_manager.get_current_limit(
-                    connector_id=connector_id,
-                    transaction_id=transaction_id
-                )
-                
-                # EV-side battery model determines base energy acceptance
-                base_step_kwh = cp.battery.step_charge(sample_interval_seconds)
-                if cp.battery.last_reason:
-                    cp.log(cp.battery.last_reason)
-                if base_step_kwh <= 0:
-                    cp.log("Battery full — stopping session")
-                    break
-                base_step = base_step_kwh * 1000.0
-                
-                # Apply OCPP profile limits if active (takes absolute precedence)
-                if profile_limit_w is not None:
-                    # Convert watts to Wh based on sample interval
-                    max_step_wh = profile_limit_w * (sample_interval_seconds / 3600)
-                    energy_step = min(base_step, max_step_wh)
-                    
-                    if energy_step < base_step:
-                        logger.info(
-                            f"{station_id}: OCPP profile limiting charge to {profile_limit_w:.0f}W "
-                            f"(step reduced from {base_step:.0f} to {energy_step:.0f} Wh)"
-                        )
-                        cp.log(
-                            f"OCPP limit: {profile_limit_w:.0f}W → {energy_step:.0f}Wh this interval"
-                        )
-                    else:
-                        logger.info(
-                            f"{station_id}: OCPP profile allows up to {profile_limit_w:.0f}W "
-                            f"(using base step {energy_step:.0f} Wh)"
-                        )
-                else:
-                    # ========== LEGACY CHARGING POLICY (fallback when no OCPP profiles) ==========
-                    logger.debug(f"{station_id}: No OCPP profiles active, using legacy policy")
-                    
-                    # Evaluate meter value decision using legacy policy engine
-                    meter_decision = evaluate_meter_value_decision(
-                        station_state={
-                            "energy_dispensed": self_energy / 1000,  # Convert Wh to kWh
-                            "charging": True,
-                            "session_active": True
-                        },
-                        profile={
-                            "charge_if_price_below": profile.charge_if_price_below,
-                            "max_energy_kwh": profile.max_energy_kwh,
-                            "allow_peak_hours": profile.allow_peak,
-                            "peak_hours": profile.peak_hours
-                        },
-                        env={
-                            "current_price": current_price_val,
-                            "hour": current_hour
-                        },
-                        current_energy_wh=self_energy,
-                        max_energy_wh=max_energy_wh
-                    )
-                    
-                    # Check if legacy policy requires stopping
-                    if meter_decision["action"] == "stop":
-                        logger.info(f"{station_id}: Legacy policy stopping - {meter_decision['reason']}")
-                        cp.log(f"Legacy policy: {meter_decision['reason']} — stopping")
-                        break
-                    
-                    # Apply legacy smart charging adjustment during peak hours
-                    if is_peak_hour(current_hour, profile.peak_hours) and profile.allow_peak:
-                        energy_step = max(float(base_step * 0.5), 10.0)
-                        logger.info(
-                            f"{station_id}: Legacy policy peak reduction "
-                            f"(step reduced from {base_step} to {energy_step} Wh)"
-                        )
-                    else:
-                        energy_step = base_step
-                
-                self_energy += energy_step
-
-                # Cap at max energy
-                if self_energy >= max_energy_wh:
-                    self_energy = max_energy_wh
-
-                mv_req = call.MeterValues(
-                    connector_id=connector_id,
-                    transaction_id=transaction_id,
-                    meter_value=[
-                        {
-                            "timestamp": datetime.now(timezone.utc).isoformat(),
-                            "sampled_value": [
-                                {
-                                    "value": str(self_energy),
-                                    "measurand": "Energy.Active.Import.Register",
-                                }
-                            ],
-                        }
-                    ],
-                )
-
-                flow_tracker.record_event("METER_VALUES", station_id)
-                mv_res = await cp.call(mv_req)
-                logger.info(
-                    f"{station_id}: MeterValues({self_energy/1000:.1f}kWh) -> {mv_res}"
-                )
-                
-                # Record meter value update
-                record_meter_value()
-                add_energy_snapshot(
-                    station_id=station_id,
-                    energy_kwh=self_energy / 1000.0,
-                    timestamp=datetime.now(timezone.utc),
-                )
-                
-                # Exit early if energy cap reached
-                if self_energy >= max_energy_wh:
-                    break
-
-
-            # -------- Stop Transaction --------
-            stop_req = call.StopTransaction(
-                transaction_id=transaction_id,
-                meter_stop=self_energy,
-                timestamp=datetime.now(timezone.utc).isoformat(),
-                id_tag=id_tag,
-            )
-            flow_tracker.record_event("STOP_TRANSACTION", station_id)
-            stop_res = await cp.call(stop_req)
-            logger.info(f"{station_id}: StopTransaction -> {stop_res}")
-            
-            # Record energy dispensed (convert from Wh to kWh)
-            energy_kwh = self_energy / 1000.0
-            cp.log(f"Charging stopped ({energy_kwh:.2f} kWh delivered)")
-            record_energy_dispensed(energy_kwh)
-            stop_session_history(
-                session_id=transaction_id,
-                station_id=station_id,
-                stop_time=datetime.now(timezone.utc),
-                energy_kwh=energy_kwh,
-            )
-            cp.current_transaction_id = None
-
-    # -------------------- MAIN TASKS --------------------
-
-    try:
-        asyncio.create_task(rule_evaluator.run())
-        recv_task = asyncio.create_task(cp.start())
-        hb_task = asyncio.create_task(send_heartbeat_loop())
-        tx_task = asyncio.create_task(auto_transaction_loop())
-
-        # Initial boot & status
-        cp.log(f"Station startup initiated")
-        await send_boot_notification()
-
-        status_req = call.StatusNotification(
-            connector_id=1,
-            error_code=ChargePointErrorCode.no_error,
-            status=ChargePointStatus.available,
-            timestamp=datetime.now(timezone.utc).isoformat(),
-        )
-        status_res = await cp.call(status_req)
-        logger.info(f"{station_id}: StatusNotification -> {status_res}")
-        cp.log("Connector available")
-
-        await asyncio.gather(recv_task, hb_task, tx_task)
-
-    except asyncio.CancelledError:
-        logger.info(f"{station_id}: cancellation requested, shutting down.")
-        cp.log("Station shutting down")
-        record_station_stopped()
-        try:
-            await ws.close()
-        except Exception:
-            pass
-        raise
-
-    except Exception as e:
-        logger.exception(f"{station_id}: unexpected error: {e}")
-        record_station_stopped()
-        try:
-            await ws.close()
-        except Exception:
-            pass
-        raise
-
-
-# -------------------- MANUAL TEST --------------------
-
-if __name__ == "__main__":
-    from profiles import DEFAULT_PROFILES
-
-    asyncio.run(
-        simulate_station(
-            "PYTHON-SIM-001",
-            "ws://localhost:9000/ocpp",
-            DEFAULT_PROFILES["default"],
-        )
-    )

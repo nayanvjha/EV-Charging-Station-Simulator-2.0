@@ -1,0 +1,962 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ChargeSim — SaaS Pitch Deck</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg-dark: #0a0e1a;
+    --bg-card: #111827;
+    --bg-card2: #1a2235;
+    --accent: #22d3ee;
+    --accent2: #818cf8;
+    --accent3: #34d399;
+    --accent4: #f472b6;
+    --text: #e2e8f0;
+    --text-dim: #94a3b8;
+    --gradient-1: linear-gradient(135deg, #22d3ee, #818cf8);
+    --gradient-2: linear-gradient(135deg, #34d399, #22d3ee);
+    --gradient-3: linear-gradient(135deg, #818cf8, #f472b6);
+  }
+
+  body {
+    font-family: 'Inter', sans-serif;
+    background: var(--bg-dark);
+    color: var(--text);
+    overflow: hidden;
+    height: 100vh;
+    width: 100vw;
+  }
+
+  /* Slide Container */
+  .deck { position: relative; width: 100vw; height: 100vh; }
+
+  .slide {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding: 60px 80px;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateX(60px);
+    transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .slide.active {
+    opacity: 1;
+    visibility: visible;
+    transform: translateX(0);
+  }
+
+  .slide.exit {
+    opacity: 0;
+    transform: translateX(-60px);
+  }
+
+  /* Background effects */
+  .bg-glow {
+    position: fixed;
+    width: 600px;
+    height: 600px;
+    border-radius: 50%;
+    filter: blur(150px);
+    opacity: 0.12;
+    pointer-events: none;
+    z-index: 0;
+  }
+  .glow-1 { top: -200px; right: -100px; background: var(--accent); }
+  .glow-2 { bottom: -200px; left: -100px; background: var(--accent2); }
+
+  /* Typography */
+  .slide-number {
+    position: absolute;
+    top: 30px;
+    left: 40px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--accent);
+    letter-spacing: 3px;
+    text-transform: uppercase;
+  }
+
+  h1 {
+    font-size: 64px;
+    font-weight: 900;
+    line-height: 1.1;
+    letter-spacing: -2px;
+  }
+
+  h2 {
+    font-size: 44px;
+    font-weight: 800;
+    line-height: 1.15;
+    letter-spacing: -1px;
+    margin-bottom: 32px;
+  }
+
+  h3 {
+    font-size: 22px;
+    font-weight: 600;
+    margin-bottom: 12px;
+  }
+
+  .gradient-text {
+    background: var(--gradient-1);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .gradient-text-2 {
+    background: var(--gradient-2);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .gradient-text-3 {
+    background: var(--gradient-3);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .subtitle {
+    font-size: 22px;
+    color: var(--text-dim);
+    margin-top: 20px;
+    font-weight: 400;
+    max-width: 700px;
+    text-align: center;
+    line-height: 1.6;
+  }
+
+  .tagline {
+    font-size: 28px;
+    font-weight: 300;
+    color: var(--text-dim);
+    margin-top: 16px;
+    font-style: italic;
+  }
+
+  /* Cards */
+  .card-grid {
+    display: grid;
+    gap: 20px;
+    width: 100%;
+    max-width: 1100px;
+  }
+
+  .card-grid-2 { grid-template-columns: 1fr 1fr; }
+  .card-grid-3 { grid-template-columns: 1fr 1fr 1fr; }
+  .card-grid-4 { grid-template-columns: 1fr 1fr; }
+
+  .card {
+    background: var(--bg-card);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 16px;
+    padding: 28px;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: var(--gradient-1);
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+
+  .card:hover { border-color: rgba(34, 211, 238, 0.2); transform: translateY(-2px); }
+  .card:hover::before { opacity: 1; }
+
+  .card-icon {
+    font-size: 32px;
+    margin-bottom: 14px;
+    display: block;
+  }
+
+  .card h3 { color: #fff; font-size: 18px; font-weight: 700; margin-bottom: 8px; }
+  .card p { color: var(--text-dim); font-size: 14px; line-height: 1.6; }
+  .card ul { color: var(--text-dim); font-size: 14px; line-height: 1.8; padding-left: 18px; }
+  .card li { margin-bottom: 2px; }
+
+  /* Stat cards */
+  .stat-row {
+    display: flex;
+    gap: 24px;
+    margin-top: 40px;
+  }
+
+  .stat-card {
+    background: var(--bg-card);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 14px;
+    padding: 24px 32px;
+    text-align: center;
+    min-width: 160px;
+  }
+
+  .stat-value {
+    font-size: 36px;
+    font-weight: 800;
+    display: block;
+    margin-bottom: 6px;
+  }
+
+  .stat-label {
+    font-size: 13px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    font-weight: 500;
+  }
+
+  /* Pricing table */
+  .pricing-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 18px;
+    width: 100%;
+    max-width: 1100px;
+  }
+
+  .price-card {
+    background: var(--bg-card);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 16px;
+    padding: 28px 22px;
+    text-align: center;
+    transition: all 0.3s;
+  }
+
+  .price-card.featured {
+    border-color: var(--accent);
+    background: linear-gradient(180deg, rgba(34,211,238,0.08) 0%, var(--bg-card) 100%);
+    transform: scale(1.04);
+  }
+
+  .price-card .tier-name {
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: var(--accent);
+    margin-bottom: 10px;
+  }
+
+  .price-card .price {
+    font-size: 38px;
+    font-weight: 800;
+    margin-bottom: 4px;
+  }
+
+  .price-card .price-sub {
+    font-size: 13px;
+    color: var(--text-dim);
+    margin-bottom: 18px;
+  }
+
+  .price-card ul {
+    list-style: none;
+    text-align: left;
+    font-size: 13px;
+    color: var(--text-dim);
+    line-height: 2;
+  }
+
+  .price-card ul li::before {
+    content: '✓ ';
+    color: var(--accent3);
+    font-weight: 700;
+  }
+
+  /* Customers table */
+  .customer-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    width: 100%;
+    max-width: 1000px;
+  }
+
+  .customer-card {
+    background: var(--bg-card);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 14px;
+    padding: 22px 28px;
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+  }
+
+  .customer-card .icon { font-size: 28px; flex-shrink: 0; margin-top: 2px; }
+  .customer-card h4 { color: #fff; font-size: 15px; font-weight: 700; margin-bottom: 4px; }
+  .customer-card p { font-size: 13px; color: var(--text-dim); line-height: 1.5; }
+
+  /* Architecture */
+  .arch-box {
+    background: var(--bg-card);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 16px;
+    padding: 36px 48px;
+    width: 100%;
+    max-width: 900px;
+    font-family: 'Inter', monospace;
+  }
+
+  .arch-layer {
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 10px;
+    padding: 14px 20px;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .arch-layer.engine { background: rgba(34,211,238,0.08); border-color: rgba(34,211,238,0.2); }
+  .arch-layer.api { background: rgba(129,140,248,0.08); border-color: rgba(129,140,248,0.2); }
+  .arch-layer.infra { background: rgba(52,211,153,0.08); border-color: rgba(52,211,153,0.2); }
+
+  .arch-layer .layer-label {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    width: 90px;
+    flex-shrink: 0;
+  }
+
+  .arch-layer .layer-items {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .arch-chip {
+    background: rgba(255,255,255,0.06);
+    border-radius: 6px;
+    padding: 5px 12px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text);
+  }
+
+  /* Done vs Next */
+  .comparison {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    width: 100%;
+    max-width: 1000px;
+  }
+
+  .comparison-col {
+    background: var(--bg-card);
+    border-radius: 16px;
+    padding: 30px;
+    border: 1px solid rgba(255,255,255,0.06);
+  }
+
+  .comparison-col h3 {
+    font-size: 17px;
+    font-weight: 700;
+    margin-bottom: 18px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .comparison-col ul {
+    list-style: none;
+    font-size: 14px;
+    line-height: 2.1;
+  }
+
+  .check { color: var(--accent3); }
+  .next-icon { color: var(--accent); }
+
+  /* Navigation */
+  .nav {
+    position: fixed;
+    bottom: 30px;
+    right: 40px;
+    display: flex;
+    gap: 10px;
+    z-index: 1000;
+  }
+
+  .nav button {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    border: 1px solid rgba(255,255,255,0.1);
+    background: var(--bg-card);
+    color: var(--text);
+    font-size: 18px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+  }
+
+  .nav button:hover {
+    background: var(--accent);
+    color: var(--bg-dark);
+    border-color: var(--accent);
+  }
+
+  .progress-bar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 3px;
+    background: var(--gradient-1);
+    transition: width 0.4s ease;
+    z-index: 1000;
+  }
+
+  .slide-counter {
+    position: fixed;
+    bottom: 38px;
+    left: 40px;
+    font-size: 13px;
+    color: var(--text-dim);
+    font-weight: 500;
+    z-index: 1000;
+  }
+
+  /* Animations */
+  @keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-10px); }
+  }
+
+  .float { animation: float 3s ease-in-out infinite; }
+
+  @keyframes pulse-glow {
+    0%, 100% { opacity: 0.1; }
+    50% { opacity: 0.2; }
+  }
+
+  .bg-glow { animation: pulse-glow 6s ease-in-out infinite; }
+
+  .fade-in-up {
+    opacity: 0;
+    transform: translateY(20px);
+    transition: all 0.5s ease;
+  }
+
+  .active .fade-in-up {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  .active .fade-in-up:nth-child(2) { transition-delay: 0.1s; }
+  .active .fade-in-up:nth-child(3) { transition-delay: 0.2s; }
+  .active .fade-in-up:nth-child(4) { transition-delay: 0.3s; }
+  .active .fade-in-up:nth-child(5) { transition-delay: 0.35s; }
+  .active .fade-in-up:nth-child(6) { transition-delay: 0.4s; }
+
+  /* Highlight badge */
+  .badge {
+    display: inline-block;
+    background: rgba(34,211,238,0.12);
+    color: var(--accent);
+    font-size: 13px;
+    font-weight: 600;
+    padding: 5px 14px;
+    border-radius: 20px;
+    margin-bottom: 16px;
+  }
+
+  /* CTA slide */
+  .cta-big {
+    font-size: 52px;
+    font-weight: 900;
+    text-align: center;
+    line-height: 1.2;
+    letter-spacing: -1px;
+  }
+
+  /* Key point */
+  .key-point {
+    background: linear-gradient(135deg, rgba(34,211,238,0.06), rgba(129,140,248,0.06));
+    border: 1px solid rgba(34,211,238,0.15);
+    border-radius: 12px;
+    padding: 18px 28px;
+    margin-top: 28px;
+    max-width: 700px;
+    text-align: center;
+    font-size: 16px;
+    color: var(--text);
+    line-height: 1.6;
+  }
+
+  /* Responsive tweaks for smaller screens */
+  @media (max-width: 1200px) {
+    h1 { font-size: 48px; }
+    h2 { font-size: 36px; }
+    .slide { padding: 40px 50px; }
+    .pricing-grid { grid-template-columns: repeat(2, 1fr); }
+  }
+</style>
+</head>
+<body>
+
+<div class="bg-glow glow-1"></div>
+<div class="bg-glow glow-2"></div>
+<div class="progress-bar" id="progressBar"></div>
+<div class="slide-counter" id="slideCounter"></div>
+
+<div class="deck" id="deck">
+
+  <!-- SLIDE 1: Title -->
+  <div class="slide active" data-slide="0">
+    <div class="fade-in-up" style="font-size:60px; margin-bottom:10px;">⚡</div>
+    <h1 class="fade-in-up"><span class="gradient-text">ChargeSim</span></h1>
+    <div class="tagline fade-in-up">The Postman for EV Charging Infrastructure</div>
+    <p class="subtitle fade-in-up">
+      Spin up hundreds of virtual OCPP charging stations.<br>
+      Test, validate & stress-test your CSMS — without hardware.
+    </p>
+    <div class="stat-row fade-in-up">
+      <div class="stat-card">
+        <span class="stat-value gradient-text">1000+</span>
+        <span class="stat-label">Virtual Stations</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-value gradient-text-2">OCPP 1.6J</span>
+        <span class="stat-label">Full Protocol</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-value gradient-text-3">Real-Time</span>
+        <span class="stat-label">Dashboard & SOC</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 2: Problem -->
+  <div class="slide" data-slide="1">
+    <span class="badge fade-in-up">THE PROBLEM</span>
+    <h2 class="fade-in-up">Testing EV charging systems is<br><span class="gradient-text">expensive & slow</span></h2>
+    <div class="card-grid card-grid-3 fade-in-up">
+      <div class="card">
+        <span class="card-icon">💸</span>
+        <h3>Hardware Costs</h3>
+        <p>A single test charger costs <strong>₹3-10 Lakhs</strong>. Testing at scale requires dozens of units — crores in hardware.</p>
+      </div>
+      <div class="card">
+        <span class="card-icon">🐌</span>
+        <h3>Slow Iteration</h3>
+        <p>Physical charger setup takes <strong>weeks</strong>. Every firmware change needs re-deployment to real hardware.</p>
+      </div>
+      <div class="card">
+        <span class="card-icon">🔒</span>
+        <h3>No Security Testing</h3>
+        <p>Can't simulate attacks on production chargers. <strong>Zero visibility</strong> into protocol-level vulnerabilities.</p>
+      </div>
+    </div>
+    <div class="key-point fade-in-up">
+      💡 Every CSMS vendor, CPO, and OEM builds custom internal test tools — <strong>there is no standard SaaS product for this</strong>
+    </div>
+  </div>
+
+  <!-- SLIDE 3: Solution -->
+  <div class="slide" data-slide="2">
+    <span class="badge fade-in-up">THE SOLUTION</span>
+    <h2 class="fade-in-up">A <span class="gradient-text-2">cloud simulation platform</span><br>for EV charging</h2>
+    <div class="card-grid card-grid-4 fade-in-up" style="margin-top: 8px;">
+      <div class="card">
+        <span class="card-icon">🔌</span>
+        <h3>OCPP Station Simulator</h3>
+        <ul>
+          <li>Simulate 10–1000+ OCPP 1.6J stations</li>
+          <li>Full message lifecycle (Boot → Charge → Stop)</li>
+          <li>5 behavior profiles (busy, idle, flaky…)</li>
+          <li>EV battery model with SOC tapering</li>
+        </ul>
+      </div>
+      <div class="card">
+        <span class="card-icon">⚡</span>
+        <h3>Smart Charging Engine</h3>
+        <ul>
+          <li>Price-aware charging policy</li>
+          <li>Peak-hour logic & energy caps</li>
+          <li>OCPP SmartCharging profiles</li>
+          <li>24 unit tests — production-grade</li>
+        </ul>
+      </div>
+      <div class="card">
+        <span class="card-icon">🛡️</span>
+        <h3>Security SOC</h3>
+        <ul>
+          <li>Built-in intrusion detection (IDS)</li>
+          <li>Spoofing & payload tampering alerts</li>
+          <li>Attack simulation endpoints</li>
+          <li>Configurable detection rules</li>
+        </ul>
+      </div>
+      <div class="card">
+        <span class="card-icon">🔁</span>
+        <h3>Deterministic Replay</h3>
+        <ul>
+          <li>Replay real charging data from CSV</li>
+          <li>STRICT mode for correctness proofs</li>
+          <li>Scenario engine (YAML scripted tests)</li>
+          <li>Regression testing in CI/CD</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 4: Live Demo / Dashboard -->
+  <div class="slide" data-slide="3">
+    <span class="badge fade-in-up">WORKING PRODUCT</span>
+    <h2 class="fade-in-up">Real-time <span class="gradient-text">Dashboard</span> & Control</h2>
+    <div class="arch-box fade-in-up" style="margin-top: 10px;">
+      <div class="arch-layer engine">
+        <span class="layer-label" style="color: var(--accent);">Dashboard</span>
+        <div class="layer-items">
+          <span class="arch-chip">📊 Live station table</span>
+          <span class="arch-chip">📈 Energy & earnings stats</span>
+          <span class="arch-chip">⚙️ Swarm scaling</span>
+          <span class="arch-chip">💰 Price controls</span>
+        </div>
+      </div>
+      <div class="arch-layer api">
+        <span class="layer-label" style="color: var(--accent2);">SOC Panel</span>
+        <div class="layer-items">
+          <span class="arch-chip">🚨 Security alerts</span>
+          <span class="arch-chip">📉 Severity charts</span>
+          <span class="arch-chip">🔍 Station drill-down</span>
+          <span class="arch-chip">🧪 Attack simulator</span>
+        </div>
+      </div>
+      <div class="arch-layer engine">
+        <span class="layer-label" style="color: var(--accent);">Per Station</span>
+        <div class="layer-items">
+          <span class="arch-chip">📋 Activity logs</span>
+          <span class="arch-chip">🔋 Battery SOC</span>
+          <span class="arch-chip">⚡ Smart charging progress</span>
+          <span class="arch-chip">🗺️ Geo-location map</span>
+        </div>
+      </div>
+      <div class="arch-layer infra">
+        <span class="layer-label" style="color: var(--accent3);">APIs</span>
+        <div class="layer-items">
+          <span class="arch-chip">REST API (FastAPI)</span>
+          <span class="arch-chip">WebSocket (OCPP)</span>
+          <span class="arch-chip">Prometheus metrics</span>
+          <span class="arch-chip">CSV replay API</span>
+        </div>
+      </div>
+    </div>
+    <div class="key-point fade-in-up">
+      🖥️ <strong>Live demo available</strong> — run <code>python start_all.py</code> and open <code>localhost:8000</code>
+    </div>
+  </div>
+
+  <!-- SLIDE 5: Architecture -->
+  <div class="slide" data-slide="4">
+    <span class="badge fade-in-up">TECH ARCHITECTURE</span>
+    <h2 class="fade-in-up">Production-grade <span class="gradient-text-3">engineering</span></h2>
+    <div class="arch-box fade-in-up">
+      <div class="arch-layer engine">
+        <span class="layer-label" style="color: var(--accent);">Engine</span>
+        <div class="layer-items">
+          <span class="arch-chip">OCPP 1.6J Protocol</span>
+          <span class="arch-chip">Policy Engine</span>
+          <span class="arch-chip">Battery Model</span>
+          <span class="arch-chip">Replay Engine</span>
+          <span class="arch-chip">Scenario Runner</span>
+        </div>
+      </div>
+      <div class="arch-layer api">
+        <span class="layer-label" style="color: var(--accent2);">API</span>
+        <div class="layer-items">
+          <span class="arch-chip">FastAPI</span>
+          <span class="arch-chip">API Key Auth</span>
+          <span class="arch-chip">Rate Limiting</span>
+          <span class="arch-chip">Pydantic Models</span>
+          <span class="arch-chip">REST + WebSocket</span>
+        </div>
+      </div>
+      <div class="arch-layer infra">
+        <span class="layer-label" style="color: var(--accent3);">Infra</span>
+        <div class="layer-items">
+          <span class="arch-chip">SQLAlchemy ORM</span>
+          <span class="arch-chip">Docker</span>
+          <span class="arch-chip">Prometheus</span>
+          <span class="arch-chip">Pytest (24 tests)</span>
+          <span class="arch-chip">Alembic Migrations</span>
+        </div>
+      </div>
+    </div>
+    <div style="display:flex; gap:16px; margin-top:24px" class="fade-in-up">
+      <div class="stat-card">
+        <span class="stat-value" style="font-size:28px; color: var(--accent);">30+</span>
+        <span class="stat-label">Python Modules</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-value" style="font-size:28px; color: var(--accent3);">24</span>
+        <span class="stat-label">Unit Tests</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-value" style="font-size:28px; color: var(--accent2);">15+</span>
+        <span class="stat-label">API Endpoints</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-value" style="font-size:28px; color: var(--accent4);">6</span>
+        <span class="stat-label">DB Models</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 6: Target Customers -->
+  <div class="slide" data-slide="5">
+    <span class="badge fade-in-up">TARGET MARKET</span>
+    <h2 class="fade-in-up">Who <span class="gradient-text-2">pays</span> & why</h2>
+    <div class="customer-grid fade-in-up">
+      <div class="customer-card">
+        <span class="icon">🏢</span>
+        <div>
+          <h4>CSMS Vendors</h4>
+          <p>ChargePoint, Driivz, AMPECO — need to test backends against 100s of chargers before deployment</p>
+        </div>
+      </div>
+      <div class="customer-card">
+        <span class="icon">🏭</span>
+        <div>
+          <h4>Charger OEMs</h4>
+          <p>ABB, Delta, Schneider — firmware testing requires physical chargers at ₹5L+ each. We replace that.</p>
+        </div>
+      </div>
+      <div class="customer-card">
+        <span class="icon">⛽</span>
+        <div>
+          <h4>CPO / Fleet Operators</h4>
+          <p>Tata Power, Adani, BPCL — can't test billing & load management before buying hardware</p>
+        </div>
+      </div>
+      <div class="customer-card">
+        <span class="icon">🧪</span>
+        <div>
+          <h4>Certification Labs</h4>
+          <p>TÜV, UL — need repeatable OCPP compliance test scenarios with deterministic replay</p>
+        </div>
+      </div>
+      <div class="customer-card">
+        <span class="icon">🚀</span>
+        <div>
+          <h4>EV Startups</h4>
+          <p>Building charging apps? Can't afford hardware during development. Free tier gets them started.</p>
+        </div>
+      </div>
+      <div class="customer-card">
+        <span class="icon">🔐</span>
+        <div>
+          <h4>Security Teams</h4>
+          <p>Pen testers & red teams — built-in attack simulation for OCPP vulnerability assessment</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 7: Pricing -->
+  <div class="slide" data-slide="6">
+    <span class="badge fade-in-up">REVENUE MODEL</span>
+    <h2 class="fade-in-up"><span class="gradient-text">Subscription</span> pricing</h2>
+    <div class="pricing-grid fade-in-up">
+      <div class="price-card">
+        <div class="tier-name">Free</div>
+        <div class="price">$0</div>
+        <div class="price-sub">forever</div>
+        <ul>
+          <li>10 stations</li>
+          <li>1 API key</li>
+          <li>Basic simulation</li>
+          <li>7-day data retention</li>
+          <li>Community support</li>
+        </ul>
+      </div>
+      <div class="price-card featured">
+        <div class="tier-name">Pro</div>
+        <div class="price">$49</div>
+        <div class="price-sub">per month</div>
+        <ul>
+          <li>100 stations</li>
+          <li>5 API keys</li>
+          <li>Full SOC + Replay</li>
+          <li>90-day retention</li>
+          <li>Webhooks + Email support</li>
+        </ul>
+      </div>
+      <div class="price-card">
+        <div class="tier-name">Enterprise</div>
+        <div class="price">$199</div>
+        <div class="price-sub">per month</div>
+        <ul>
+          <li>Unlimited stations</li>
+          <li>Unlimited API keys</li>
+          <li>Custom detection rules</li>
+          <li>1-year retention</li>
+          <li>White-label + SLA</li>
+        </ul>
+      </div>
+      <div class="price-card">
+        <div class="tier-name">On-Premise</div>
+        <div class="price">$5K+</div>
+        <div class="price-sub">one-time</div>
+        <ul>
+          <li>Self-hosted</li>
+          <li>Source code access</li>
+          <li>Custom integrations</li>
+          <li>Air-gapped deployment</li>
+          <li>Dedicated support</li>
+        </ul>
+      </div>
+    </div>
+    <div class="key-point fade-in-up">
+      🌍 EV charging market: <strong>$30B by 2027</strong> (30% YoY growth) — no dedicated SaaS testing tool exists
+    </div>
+  </div>
+
+  <!-- SLIDE 8: Done vs Next -->
+  <div class="slide" data-slide="7">
+    <span class="badge fade-in-up">ROADMAP</span>
+    <h2 class="fade-in-up">Built <span class="gradient-text-2">the hard part</span> — SaaS layer is next</h2>
+    <div class="comparison fade-in-up">
+      <div class="comparison-col">
+        <h3><span class="check">✅</span> Done (Working Today)</h3>
+        <ul>
+          <li><span class="check">✓</span> OCPP 1.6J simulation engine</li>
+          <li><span class="check">✓</span> Smart charging policy engine</li>
+          <li><span class="check">✓</span> Security SOC + IDS rules</li>
+          <li><span class="check">✓</span> CSV replay (deterministic)</li>
+          <li><span class="check">✓</span> REST API + web dashboard</li>
+          <li><span class="check">✓</span> Docker container deployment</li>
+          <li><span class="check">✓</span> Prometheus metrics export</li>
+          <li><span class="check">✓</span> Scenario engine (YAML)</li>
+          <li><span class="check">✓</span> 24 unit tests passing</li>
+          <li><span class="check">✓</span> EV battery model (SOC / temp)</li>
+        </ul>
+      </div>
+      <div class="comparison-col">
+        <h3><span class="next-icon">🔜</span> Next (2-3 Weeks)</h3>
+        <ul>
+          <li><span class="next-icon">→</span> Multi-tenant auth (signup/login)</li>
+          <li><span class="next-icon">→</span> Organization workspaces</li>
+          <li><span class="next-icon">→</span> PostgreSQL migration</li>
+          <li><span class="next-icon">→</span> SaaS landing page + pricing</li>
+          <li><span class="next-icon">→</span> Stripe billing integration</li>
+          <li><span class="next-icon">→</span> API key management UI</li>
+          <li><span class="next-icon">→</span> Webhook notifications</li>
+          <li><span class="next-icon">→</span> Usage analytics per org</li>
+          <li><span class="next-icon">→</span> Role-based access control</li>
+          <li><span class="next-icon">→</span> White-label support</li>
+        </ul>
+      </div>
+    </div>
+    <div class="key-point fade-in-up">
+      💡 The <strong>simulation engine is the hard, domain-specific IP</strong>. The SaaS wrapper is standard web dev.
+    </div>
+  </div>
+
+  <!-- SLIDE 9: Closing -->
+  <div class="slide" data-slide="8">
+    <div class="fade-in-up" style="font-size:60px; margin-bottom:20px;">⚡</div>
+    <div class="cta-big fade-in-up">
+      <span class="gradient-text">ChargeSim</span>
+    </div>
+    <p class="subtitle fade-in-up" style="margin-top: 24px; max-width: 660px;">
+      The only SaaS platform for OCPP charging station simulation.<br>
+      <strong>The core engine is built. The market is wide open.</strong>
+    </p>
+    <div class="stat-row fade-in-up" style="margin-top: 36px;">
+      <div class="stat-card">
+        <span class="stat-value" style="font-size:24px; color: var(--accent);">1000+ stations</span>
+        <span class="stat-label">Simulation Scale</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-value" style="font-size:24px; color: var(--accent3);">$30B Market</span>
+        <span class="stat-label">By 2027</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-value" style="font-size:24px; color: var(--accent4);">Zero</span>
+        <span class="stat-label">SaaS Competitors</span>
+      </div>
+    </div>
+    <div class="key-point fade-in-up" style="margin-top: 36px;">
+      <strong>Let's build the future of EV charging infrastructure testing.</strong>
+    </div>
+  </div>
+
+</div>
+
+<!-- Navigation -->
+<div class="nav">
+  <button onclick="prevSlide()" title="Previous (← arrow key)">←</button>
+  <button onclick="nextSlide()" title="Next (→ arrow key)">→</button>
+</div>
+
+<script>
+  const slides = document.querySelectorAll('.slide');
+  const progressBar = document.getElementById('progressBar');
+  const slideCounter = document.getElementById('slideCounter');
+  let current = 0;
+  const total = slides.length;
+
+  function updateSlide() {
+    slides.forEach((s, i) => {
+      s.classList.remove('active', 'exit');
+      if (i === current) s.classList.add('active');
+      else if (i < current) s.classList.add('exit');
+    });
+    progressBar.style.width = ((current + 1) / total * 100) + '%';
+    slideCounter.textContent = `${current + 1} / ${total}`;
+  }
+
+  function nextSlide() {
+    if (current < total - 1) { current++; updateSlide(); }
+  }
+
+  function prevSlide() {
+    if (current > 0) { current--; updateSlide(); }
+  }
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); nextSlide(); }
+    if (e.key === 'ArrowLeft') { e.preventDefault(); prevSlide(); }
+    if (e.key === 'Home') { current = 0; updateSlide(); }
+    if (e.key === 'End') { current = total - 1; updateSlide(); }
+  });
+
+  // Touch/swipe support
+  let touchStartX = 0;
+  document.addEventListener('touchstart', (e) => { touchStartX = e.touches[0].clientX; });
+  document.addEventListener('touchend', (e) => {
+    const diff = touchStartX - e.changedTouches[0].clientX;
+    if (Math.abs(diff) > 50) { diff > 0 ? nextSlide() : prevSlide(); }
+  });
+
+  updateSlide();
+</script>
+
+</body>
+</html>

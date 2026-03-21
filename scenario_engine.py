@@ -4,12 +4,12 @@ import contextlib
 import json
 import logging
 import os
-import time
 from typing import Any, Dict, List, Optional, cast
 
 import websockets
 from ocpp.v16 import ChargePoint as CP
 from ocpp.v16 import call
+from ocpp_compat import build_call
 
 try:
     import yaml
@@ -18,6 +18,8 @@ except Exception:  # pragma: no cover
 
 from controller_api import CSMS_URL, StationManager
 from profiles import DEFAULT_PROFILES
+from determinism_guards import assert_no_defaults_or_fallbacks, assert_no_wall_clock_usage
+from replay_mode import ReplayMode, is_replay_mode_explicit, set_replay_mode
 import controller_api
 from fault_injector import FaultRule, FaultType, fault_manager
 from security_monitor import EventType, security_monitor
@@ -25,6 +27,16 @@ from security_monitor import EventType, security_monitor
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("scenario_engine")
+
+if not is_replay_mode_explicit():
+    set_replay_mode(ReplayMode.STRICT)
+assert_no_defaults_or_fallbacks()
+try:
+    assert_no_wall_clock_usage()
+except RuntimeError as exc:
+    if os.getenv("ENFORCE_WALL_CLOCK_GUARD", "0") == "1":
+        raise
+    logger.warning("Wall-clock guard warning ignored: %s", exc)
 
 SUPPORTED_ACTIONS = {
     "start_stations",
@@ -35,8 +47,14 @@ SUPPORTED_ACTIONS = {
     "scale_stations",
     "inject_fault",
     "spoof_command",
-    "tamper_payload",
 }
+
+
+def _guard_no_wall_clock_reference(event: Dict[str, Any]) -> None:
+    for key in event.keys():
+        lowered = key.lower()
+        if "time" in lowered or "datetime" in lowered or "monotonic" in lowered:
+            raise RuntimeError("Scenario timing forbidden")
 
 
 class ScenarioRunner:
@@ -53,36 +71,37 @@ class ScenarioRunner:
         data = _load_scenario_file(file_path)
         events = _normalize_events(data)
         _validate_events(events)
-        return sorted(events, key=lambda ev: ev["time"])
+        for event in events:
+            if "time" in event:
+                raise RuntimeError("Scenario timing forbidden")
+        return list(events)
 
     async def run(self, events: List[Dict[str, Any]], base_dir: Optional[str] = None) -> None:
-        self._scenario_start = time.monotonic()
-        last_time = 0.0
-
         for event in events:
-            event_time = float(event["time"])
-            delay = max(0.0, event_time - last_time)
-            if not self.dry_run and delay > 0:
-                await asyncio.sleep(delay)
-            last_time = event_time
-
             await self._execute_event(event, base_dir=base_dir)
 
     async def _execute_event(self, event: Dict[str, Any], base_dir: Optional[str] = None) -> None:
+        _guard_no_wall_clock_reference(event)
         action = event["action"]
-        timestamp = _format_time(event["time"])
+        if "time" in event:
+            raise RuntimeError("Scenario timing forbidden")
+        timestamp = "n/a"
 
         try:
             if action == "start_stations":
                 count = int(event["count"])
-                profile = event.get("profile", "default")
+                if "profile" not in event:
+                    raise ValueError("start_stations requires 'profile'")
+                profile = event["profile"]
                 self._log(f"[{timestamp}] Start stations count={count} profile={profile}")
                 if not self.dry_run:
                     await self.manager.scale_to(0, count, profile)
 
             elif action == "scale_stations":
                 new_total = int(event["new_total"])
-                profile = event.get("profile", "default")
+                if "profile" not in event:
+                    raise ValueError("scale_stations requires 'profile'")
+                profile = event["profile"]
                 self._log(f"[{timestamp}] Scale stations total={new_total} profile={profile}")
                 if not self.dry_run:
                     await self.manager.scale_to(0, new_total, profile)
@@ -146,38 +165,7 @@ class ScenarioRunner:
                     f"[{timestamp}] Inject fault {fault_type_value} station_id={station_id} "
                     f"duration={duration} message_type={message_type}"
                 )
-                if not self.dry_run:
-                    if fault_type_value == "HEARTBEAT_FLOOD":
-                        chargepoint = cast(Any, self.manager.station_chargepoints.get(station_id))
-                        if chargepoint:
-                            chargepoint.enable_heartbeat_flood(duration=duration)
-                        security_monitor.log_event(
-                            EventType.HEARTBEAT_FLOOD,
-                            station_id,
-                            f"Heartbeat flood injected for {duration}s",
-                            severity="medium",
-                        )
-                    elif fault_type_value == "DUPLICATE_TRANSACTIONS":
-                        chargepoint = cast(Any, self.manager.station_chargepoints.get(station_id))
-                        if chargepoint:
-                            chargepoint.enable_duplicate_transactions(duration=duration)
-                        security_monitor.log_event(
-                            EventType.DUPLICATE_TRANSACTION,
-                            station_id,
-                            f"Duplicate transaction IDs injected for {duration}s",
-                            severity="medium",
-                        )
-                    else:
-                        fault_type = FaultType(fault_type_value)
-                        fault_manager.add_fault_rule(
-                            FaultRule(
-                                fault_type=fault_type,
-                                station_id=station_id,
-                                trigger_time=0,
-                                duration=duration,
-                                message_type=message_type,
-                            )
-                        )
+                raise RuntimeError("Replay-driven fault injection required")
 
             elif action == "spoof_command":
                 station_id = event["station_id"]
@@ -201,33 +189,7 @@ class ScenarioRunner:
                     )
 
             elif action == "tamper_payload":
-                station_id = event["station_id"]
-                target_message = event.get("target_message")
-                corruption_type = event.get("corruption_type", "truncate_field")
-                duration = event.get("duration")
-                self._log(
-                    f"[{timestamp}] Tamper payload station_id={station_id} target={target_message} "
-                    f"corruption={corruption_type} duration={duration}"
-                )
-                if not self.dry_run:
-                    chargepoint = cast(Any, self.manager.station_chargepoints.get(station_id))
-                    if chargepoint:
-                        chargepoint.enable_tamper_payload(
-                            target_message=target_message,
-                            corruption_type=corruption_type,
-                            duration=duration,
-                        )
-                    else:
-                        await _send_malformed_payload(
-                            station_id=station_id,
-                            csms_url=self.manager.csms_url,
-                        )
-                    security_monitor.log_event(
-                        EventType.MALFORMED_MESSAGE,
-                        station_id,
-                        f"Tamper payload injected ({corruption_type})",
-                        severity="high",
-                    )
+                raise RuntimeError("Tamper payload faults must be replay-driven")
 
             else:
                 raise ValueError(f"Unsupported action: {action}")
@@ -264,14 +226,10 @@ def _validate_events(events: List[Dict[str, Any]]) -> None:
     for idx, event in enumerate(events):
         if not isinstance(event, dict):
             raise ValueError(f"Event #{idx} must be an object")
-        if "time" not in event:
-            raise ValueError(f"Event #{idx} is missing 'time'")
+        if "time" in event:
+            raise RuntimeError("Scenario timing forbidden")
         if "action" not in event:
             raise ValueError(f"Event #{idx} is missing 'action'")
-
-        time_val = event["time"]
-        if not isinstance(time_val, (int, float)) or time_val < 0:
-            raise ValueError(f"Event #{idx} has invalid 'time': {time_val}")
 
         action = event["action"]
         if action not in SUPPORTED_ACTIONS:
@@ -304,9 +262,6 @@ def _validate_events(events: List[Dict[str, Any]]) -> None:
             for key in ("station_id", "type"):
                 if key not in event:
                     raise ValueError(f"Event #{idx} spoof_command requires '{key}'")
-        if action == "tamper_payload":
-            if "station_id" not in event:
-                raise ValueError(f"Event #{idx} tamper_payload requires 'station_id'")
 
 
 def _load_profile_file(file_path: str) -> Dict[str, Any]:
@@ -323,10 +278,7 @@ def _resolve_path(path: str, base_dir: Optional[str]) -> str:
 
 
 def _format_time(seconds: float) -> str:
-    total_seconds = int(seconds)
-    minutes = total_seconds // 60
-    secs = total_seconds % 60
-    return f"{minutes:02d}:{secs:02d}"
+    raise RuntimeError("Scenario timing forbidden")
 
 
 async def _send_spoofed_command(
@@ -343,34 +295,23 @@ async def _send_spoofed_command(
     recv_task = asyncio.create_task(cp.start())
     try:
         if message_type == "BootNotification":
-            req = call.BootNotification(
+            req = build_call(
+                "BootNotification",
                 charge_point_model=payload.get("charge_point_model", "Spoofed-Model"),
                 charge_point_vendor=payload.get("charge_point_vendor", "Spoofed-Vendor"),
             )
         elif message_type == "Heartbeat":
-            req = call.Heartbeat()
+            req = build_call("Heartbeat")
         elif message_type == "Authorize":
-            req = call.Authorize(id_tag=payload.get("id_tag", "SPOOF"))
+            req = build_call("Authorize", id_tag=payload.get("id_tag", "SPOOF"))
         elif message_type == "StartTransaction":
-            req = call.StartTransaction(
-                connector_id=payload.get("connector_id", 1),
-                id_tag=payload.get("id_tag", "SPOOF"),
-                meter_start=payload.get("meter_start", 0),
-                timestamp=payload.get("timestamp", time.strftime("%Y-%m-%dT%H:%M:%SZ")),
-            )
+            raise RuntimeError("Transaction outside replay forbidden")
         elif message_type == "MeterValues":
-            req = call.MeterValues(
-                connector_id=payload.get("connector_id", 1),
-                transaction_id=payload.get("transaction_id", 9999),
-                meter_value=payload.get("meter_value", []),
+            raise RuntimeError(
+                "Direct MeterValues emission is forbidden. Use replay."
             )
         elif message_type == "StopTransaction":
-            req = call.StopTransaction(
-                transaction_id=payload.get("transaction_id", 9999),
-                meter_stop=payload.get("meter_stop", 0),
-                timestamp=payload.get("timestamp", time.strftime("%Y-%m-%dT%H:%M:%SZ")),
-                id_tag=payload.get("id_tag"),
-            )
+            raise RuntimeError("Transaction outside replay forbidden")
         else:
             raise ValueError(f"Unsupported spoof_command type: {message_type}")
         await cp.call(req)

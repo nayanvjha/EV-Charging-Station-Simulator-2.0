@@ -428,7 +428,7 @@ class ChargingProfileManager:
         >>> manager = ChargingProfileManager()
         >>> success, msg = manager.add_profile(1, profile)
         >>> if success:
-        ...     limit = manager.get_current_limit(1)
+        ...     limit = manager.get_current_limit(1, replay_timestamp=some_time)
     """
     
     def __init__(self):
@@ -684,6 +684,88 @@ class ChargingProfileManager:
             return None
         
         return applicable_period.limit
+
+    def _get_period_at_time(
+        self,
+        profile: ChargingProfile,
+        target_time: datetime,
+        transaction_start: Optional[datetime] = None,
+    ) -> Optional[ChargingSchedulePeriod]:
+        schedule = profile.charging_schedule
+        schedule_start = self._get_effective_schedule_start(
+            profile, target_time, transaction_start
+        )
+
+        if schedule_start is None:
+            return None
+
+        elapsed = (target_time - schedule_start).total_seconds()
+        if elapsed < 0:
+            return None
+
+        if schedule.duration is not None and elapsed > schedule.duration:
+            return None
+
+        periods = schedule.charging_schedule_period
+        applicable_period = None
+        for period in periods:
+            if period.start_period <= elapsed:
+                applicable_period = period
+            else:
+                break
+
+        return applicable_period
+
+    def get_limit_watts_at_time(
+        self,
+        connector_id: int,
+        target_time: datetime,
+        transaction_start: Optional[datetime] = None,
+        transaction_id: Optional[int] = None,
+        voltage: Optional[float] = None,
+    ) -> Optional[float]:
+        all_profiles: List[ChargingProfile] = []
+
+        if 0 in self.profiles:
+            all_profiles.extend(self.profiles[0])
+
+        if connector_id != 0 and connector_id in self.profiles:
+            all_profiles.extend(self.profiles[connector_id])
+
+        if not all_profiles:
+            return None
+
+        valid_profiles: List[ChargingProfile] = []
+        for profile in all_profiles:
+            if not self._is_profile_valid_at_time(profile, target_time):
+                continue
+            if profile.charging_profile_purpose == ChargingProfilePurpose.TX_PROFILE:
+                if transaction_id is None or profile.transaction_id != transaction_id:
+                    continue
+            valid_profiles.append(profile)
+
+        if not valid_profiles:
+            return None
+
+        min_limit_watts: Optional[float] = None
+        for profile in valid_profiles:
+            period = self._get_period_at_time(profile, target_time, transaction_start)
+            if period is None:
+                continue
+            limit = period.limit
+            if profile.charging_schedule.charging_rate_unit == ChargingRateUnit.AMPS:
+                if voltage is None:
+                    raise RuntimeError("Voltage required for current-based charging profile")
+                phases = period.number_phases or 1
+                limit = limit * voltage * max(1, phases)
+
+            if min_limit_watts is None or limit < min_limit_watts:
+                min_limit_watts = limit
+
+        logger.debug(
+            "Limit at time for connector %s: %sW", connector_id, min_limit_watts
+        )
+        return min_limit_watts
     
     def _is_profile_valid_at_time(
         self,
@@ -711,7 +793,7 @@ class ChargingProfileManager:
         connector_id: int,
         duration: int,
         charging_rate_unit: ChargingRateUnit,
-        start_time: Optional[datetime] = None
+        start_time: datetime
     ) -> Optional[ChargingSchedule]:
         """
         Calculate composite charging schedule from all applicable profiles.
@@ -736,7 +818,7 @@ class ChargingProfileManager:
             - Lower stackLevel = higher priority within same purpose
         """
         if start_time is None:
-            start_time = datetime.now(timezone.utc)
+            raise RuntimeError("Explicit start_time required")
         
         # Collect all applicable profiles from connector 0 (charge point level) and requested connector
         all_profiles: List[ChargingProfile] = []
@@ -837,7 +919,8 @@ class ChargingProfileManager:
     def get_current_limit(
         self,
         connector_id: int,
-        transaction_id: Optional[int] = None
+        replay_timestamp: datetime,
+        transaction_id: Optional[int] = None,
     ) -> Optional[float]:
         """
         Get the current charging limit for a connector.
@@ -847,12 +930,14 @@ class ChargingProfileManager:
         
         Args:
             connector_id: Connector to get limit for
+            replay_timestamp: Replay-provided timestamp for limit evaluation
             transaction_id: Optional transaction ID for TxProfile matching
             
         Returns:
             Limit in watts or amps, or None if no profiles apply
         """
-        now = datetime.now(timezone.utc)
+        if replay_timestamp is None:
+            raise RuntimeError("replay_timestamp required for limit evaluation")
         
         # Collect applicable profiles
         all_profiles: List[ChargingProfile] = []
@@ -872,7 +957,7 @@ class ChargingProfileManager:
         valid_profiles = []
         for p in all_profiles:
             # Check time validity
-            if not self._is_profile_valid_at_time(p, now):
+            if not self._is_profile_valid_at_time(p, replay_timestamp):
                 continue
             
             # For TxProfile, must match transaction_id
@@ -889,7 +974,7 @@ class ChargingProfileManager:
         min_limit = None
         
         for profile in valid_profiles:
-            limit = self._get_limit_at_time(profile, now)
+            limit = self._get_limit_at_time(profile, replay_timestamp)
             if limit is not None:
                 if min_limit is None or limit < min_limit:
                     min_limit = limit
@@ -917,3 +1002,6 @@ class ChargingProfileManager:
             List of connector IDs
         """
         return list(self.profiles.keys())
+
+    def has_profiles(self) -> bool:
+        return any(self.profiles.values())

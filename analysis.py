@@ -283,7 +283,6 @@ def main():
     logger.info("=" * 60)
     logger.info("EV Charging Station Simulator - Analysis Report")
     logger.info("=" * 60)
-    logger.info(f"Generated: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}")
     logger.info(f"Output Directory: {REPORTS_DIR}/\n")
     
     try:

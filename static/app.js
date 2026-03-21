@@ -8,6 +8,9 @@ let cachedStations = [];
 let currentPrice = 20;
 let basePrice = 20;
 let currentModalStation = null;
+let lastReplayMode = null;
+let replayPaused = false;
+let lastStateVersion = null;
 
 // Cache for OCPP status
 const ocppStatusCache = {};
@@ -92,6 +95,43 @@ document.addEventListener("DOMContentLoaded", async () => {
 });
 
 /* =========================================================
+   TAB NAVIGATION
+   ========================================================= */
+
+window.switchTab = function(tabName) {
+  // Hide all tab content sections
+  document.querySelectorAll('.tab-content').forEach(el => {
+    el.classList.add('hidden');
+    el.classList.remove('active');
+  });
+
+  // Deactivate all tab buttons
+  document.querySelectorAll('.tab-btn').forEach(el => {
+    el.classList.remove('active');
+  });
+
+  // Show selected tab content
+  const targetTab = document.getElementById(`tab-${tabName}`);
+  if (targetTab) {
+    targetTab.classList.remove('hidden');
+    targetTab.classList.add('active');
+  }
+
+  // Activate the clicked tab button
+  const buttons = document.querySelectorAll('.tab-btn');
+  buttons.forEach(btn => {
+    if (btn.textContent.toLowerCase().trim() === tabName.toLowerCase()) {
+      btn.classList.add('active');
+    }
+  });
+
+  // Initialize map if switching to map tab
+  if (tabName === 'map' && typeof initMap === 'function') {
+    setTimeout(() => initMap(), 100);
+  }
+};
+
+/* =========================================================
    MASTER FETCH
    ========================================================= */
 
@@ -102,8 +142,12 @@ async function fetchAll() {
   if (securityLivePolling) {
     await fetchSecurityData();
   }
+  const totalsChanged = await fetchTotals();
+  const shouldRefreshStations = totalsChanged || lastReplayMode === "REAL_CSV";
+  if (!shouldRefreshStations) {
+    return;
+  }
   await fetchStations();
-  await fetchTotals();
 }
 
 /* =========================================================
@@ -112,10 +156,15 @@ async function fetchAll() {
 
 async function fetchStations() {
   try {
-    const res = await apiFetch(`/stations`);
+    const res = await apiFetch(`/stations/state`);
     if (!res.ok) throw new Error("Failed to fetch stations");
 
-    const stations = await res.json();
+    const payload = await res.json();
+    const stations = payload.stations || [];
+    if (payload.state_version === lastStateVersion && lastReplayMode !== "REAL_CSV") {
+      return;
+    }
+    lastStateVersion = payload.state_version;
     cachedStations = stations;
 
     const statTotal = document.getElementById("stat-total");
@@ -134,7 +183,7 @@ async function fetchStations() {
     tbody.innerHTML = "";
 
     if (!stations.length) {
-      tbody.innerHTML = `<tr><td colspan="9">No stations</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="10">No stations</td></tr>`;
       return;
     }
 
@@ -143,8 +192,12 @@ async function fetchStations() {
         ? `<span class="badge badge-online">online</span>`
         : `<span class="badge badge-offline">stopped</span>`;
 
-      const usage = s.running ? `${s.usage_kw.toFixed(2)} kW` : "–";
-      const energy = `${s.energy_kwh.toFixed(3)} kWh`;
+      const liveActive = s.live_metrics_active === false ? false : true;
+      const usage = s.running && liveActive ? `${s.usage_kw.toFixed(2)} kW` : "–";
+      const energy = liveActive ? `${s.energy_kwh.toFixed(3)} kWh` : "–";
+      const soc = liveActive && s.soc_percent !== null && s.soc_percent !== undefined
+        ? `${s.soc_percent.toFixed(1)}%`
+        : "–";
 
       // OCPP Status - will be populated by polling
       const ocppStatus = ocppStatusCache[s.station_id] || {
@@ -195,6 +248,7 @@ async function fetchStations() {
           <td>${status}</td>
           <td>${usage}</td>
           <td>${energy}</td>
+          <td>${soc}</td>
           <td>${ocppHTML}</td>
           <td>
             <div class="smart-charging">
@@ -202,7 +256,7 @@ async function fetchStations() {
                 <div class="sc-bar" style="width: ${s.energy_percent}%"></div>
               </div>
               <small class="sc-text">
-                ${s.energy_kwh.toFixed(1)}/${s.max_energy_kwh.toFixed(0)} kWh
+                ${liveActive ? s.energy_kwh.toFixed(1) : "–"}/${s.max_energy_kwh.toFixed(0)} kWh
                 <br>
                 Price: ₹${s.charge_if_price_below.toFixed(0)} 
                 ${s.allow_peak ? '✓ Peak' : '✗ No Peak'}
@@ -218,7 +272,7 @@ async function fetchStations() {
           </td>
         </tr>
         <tr class="logs-row hidden" id="logs-row-${s.station_id}">
-          <td colspan="9">
+          <td colspan="10">
             <div class="logs-container" id="logs-${s.station_id}">
               <div class="logs-header">
                 <h4>Activity Log</h4>
@@ -252,6 +306,17 @@ async function fetchTotals() {
     if (!res.ok) throw new Error("Failed to fetch totals");
 
     const data = await res.json();
+    lastReplayMode = data.replay_mode || lastReplayMode;
+    replayPaused = Boolean(data.replay_paused);
+
+    if (lastStateVersion !== null && data.state_version === lastStateVersion) {
+      return false;
+    }
+    lastStateVersion = data.state_version;
+
+    if (lastReplayMode === "REAL_CSV" && replayPaused) {
+      return true;
+    }
 
     const totalEnergy = document.getElementById("total-energy");
     const totalEarnings = document.getElementById("total-earnings");
@@ -262,9 +327,17 @@ async function fetchTotals() {
     if (totalEarnings)
       totalEarnings.textContent = data.total_earnings.toFixed(2);
 
+    return true;
   } catch (err) {
     console.error(err);
     showError(err.message);
+    if (lastReplayMode === "REAL_CSV") {
+      const totalEnergy = document.getElementById("total-energy");
+      const totalEarnings = document.getElementById("total-earnings");
+      if (totalEnergy) totalEnergy.textContent = "—";
+      if (totalEarnings) totalEarnings.textContent = "—";
+    }
+    return false;
   }
 }
 
@@ -894,9 +967,38 @@ async function apiPost(path, body) {
   });
 
   if (!res.ok) {
-    const text = await res.text();
-    throw new Error(text || "Request failed");
+    throw new Error(await getErrorMessage(res));
   }
+}
+
+async function apiPostJson(path, body) {
+  const res = await apiFetch(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body)
+  });
+
+  if (!res.ok) {
+    throw new Error(await getErrorMessage(res));
+  }
+
+  return res.json();
+}
+
+async function getErrorMessage(res) {
+  const text = await res.text();
+  if (!text) return "Request failed";
+
+  try {
+    const parsed = JSON.parse(text);
+    if (parsed && typeof parsed.detail === "string" && parsed.detail.trim()) {
+      return parsed.detail;
+    }
+  } catch (_) {
+    // Non-JSON error body; return raw text below.
+  }
+
+  return text;
 }
 
 function getApiKey() {
@@ -985,6 +1087,69 @@ function showSuccess(msg) {
   toast.classList.add("show");
 
   setTimeout(() => toast.classList.remove("show"), 3000);
+}
+
+/* =========================================================
+   REPLAY (CSV)
+   ========================================================= */
+
+async function runReplay() {
+  const dirEl = document.getElementById("replay-csv-dir");
+  const filesEl = document.getElementById("replay-csv-files");
+  const voltageEl = document.getElementById("replay-voltage");
+  const timezoneEl = document.getElementById("replay-timezone");
+  const durationTolEl = document.getElementById("replay-duration-tolerance");
+  const energyTolEl = document.getElementById("replay-energy-tolerance");
+  const modeEl = document.getElementById("replay-mode");
+
+  if (!dirEl || !voltageEl || !timezoneEl || !durationTolEl || !energyTolEl) return;
+
+  const csvDirectory = dirEl.value.trim();
+  const csvFilesRaw = filesEl ? filesEl.value.trim() : "";
+  const csvFiles = csvFilesRaw
+    ? csvFilesRaw.split(",").map(v => v.trim()).filter(Boolean)
+    : null;
+  const voltage = parseFloat(voltageEl.value);
+  const timezoneName = timezoneEl.value.trim() || "UTC";
+  const durationTol = parseFloat(durationTolEl.value);
+  const energyTol = parseFloat(energyTolEl.value);
+  const replayMode = modeEl && modeEl.value ? modeEl.value.trim() : "STRICT";
+  const strict = replayMode === "STRICT";
+
+  if (!csvDirectory && (!csvFiles || csvFiles.length === 0)) {
+    showError("CSV directory or files required");
+    return;
+  }
+  if (Number.isNaN(voltage) || voltage <= 0) {
+    showError("Voltage must be a positive number");
+    return;
+  }
+
+  showSpinner("Running replay…", "Processing CSV sessions");
+  try {
+    const payload = {
+      csv_directory: csvDirectory || null,
+      csv_files: csvFiles,
+      timezone_name: timezoneName,
+      voltage,
+      expected_duration_tolerance_seconds: Number.isNaN(durationTol) ? 1.0 : durationTol,
+      expected_energy_tolerance_kwh: Number.isNaN(energyTol) ? 0.1 : energyTol,
+      strict,
+      replay_mode: replayMode,
+    };
+    const endpoint = replayMode === "REAL_CSV" ? "/replay/real-csv" : "/replay/run";
+    const result = await apiPostJson(endpoint, payload);
+    if (replayMode === "REAL_CSV" && result.status === "running") {
+      showSuccess("Replay started (running in background)");
+    } else {
+      const passed = result.results ? result.results.every(r => r.passed) : true;
+      showSuccess(passed ? "Replay completed successfully" : "Replay completed with validation issues");
+    }
+  } catch (err) {
+    showError(err.message);
+  } finally {
+    hideSpinner();
+  }
 }
 
 /* =========================================================
@@ -1436,3 +1601,35 @@ async function applyBatteryProfile() {
     hideSpinner();
   }
 }
+
+/* =========================================================
+   GLOBAL EXPORTS FOR INLINE ONCLICK HANDLERS
+   ========================================================= */
+window.openSecurityPanel = openSecurityPanel;
+window.closeSecurityPanel = closeSecurityPanel;
+window.refreshSecurity = refreshSecurity;
+window.acknowledgeSecurity = acknowledgeSecurity;
+window.generateTestAlert = generateTestAlert;
+window.scaleStations = scaleStations;
+window.startSingle = startSingle;
+window.stopSingle = stopSingle;
+window.startStation = startStation;
+window.stopStation = stopStation;
+window.startAllStations = startAllStations;
+window.stopAllStations = stopAllStations;
+window.increasePrice = increasePrice;
+window.decreasePrice = decreasePrice;
+window.resetPrice = resetPrice;
+window.saveApiKey = saveApiKey;
+window.clearApiKey = clearApiKey;
+window.sendTestProfile = sendTestProfile;
+window.viewProfiles = viewProfiles;
+window.clearAllProfiles = clearAllProfiles;
+window.closeProfileModal = closeProfileModal;
+window.refreshProfileModal = refreshProfileModal;
+window.clearProfilesFromModal = clearProfilesFromModal;
+window.applyBatteryProfile = applyBatteryProfile;
+window.resetBatteryForm = resetBatteryForm;
+window.runReplay = runReplay;
+window.toggleLogs = toggleLogs;
+window.applyMapFilters = applyMapFilters;

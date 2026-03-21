@@ -19,6 +19,7 @@ API Endpoints:
 import requests
 import json
 from datetime import datetime, timezone
+FIXED_TEST_TIMESTAMP = datetime(2024, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
 
 # Configuration
 API_BASE_URL = "http://localhost:8000"
@@ -57,7 +58,7 @@ def test_send_custom_profile():
             "chargingSchedulePeriod": [
                 {"startPeriod": 0, "limit": 22000}
             ],
-            "startSchedule": datetime.now(timezone.utc).isoformat()
+            "startSchedule": FIXED_TEST_TIMESTAMP.isoformat()
         }
     }
     
@@ -87,7 +88,8 @@ def test_get_composite_schedule():
     params = {
         "connector_id": 1,
         "duration": 3600,  # 1 hour
-        "charging_rate_unit": "W"
+        "charging_rate_unit": "W",
+        "start_time": datetime(2026, 1, 8, 10, 0, 0, tzinfo=timezone.utc).isoformat(),
     }
     
     print(f"\nSending to: GET {API_BASE_URL}/stations/{STATION_ID}/composite_schedule")
