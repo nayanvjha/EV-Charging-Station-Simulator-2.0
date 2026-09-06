@@ -1,0 +1,22 @@
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Local runtime artifacts
+simulator.db
+*.log
+metrics_export.txt
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+.claude/
+
+# Private working notes
+.local-notes/
